@@ -1,8 +1,7 @@
-from flask import Flask
+from flask import Flask, request
 import requests
 import os
 import time
-from threading import Thread
 
 app = Flask(__name__)
 
@@ -10,84 +9,54 @@ app = Flask(__name__)
 # CONFIG
 # =========================
 TOKEN = os.getenv("TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
 PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"]
-INTERVAL = "1min"
 
 # =========================
-# ANTI SPAM (PRO FEATURE)
+# TELEGRAM SEND
 # =========================
-last_signal_time = {}
+def send_message(chat_id, text, reply_markup=None):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+
+    requests.post(url, json=payload)
 
 # =========================
-# TELEGRAM
+# MENU
 # =========================
-def send_telegram(msg):
-    try:
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except:
-        pass
+def menu():
+    return {
+        "inline_keyboard": [
+            [{"text": "📊 SIGNALS", "callback_data": "signals"}],
+            [{"text": "📈 STATUS", "callback_data": "status"}],
+            [{"text": "💱 PAIRS", "callback_data": "pairs"}]
+        ]
+    }
 
 # =========================
-# EMA
+# MARKET DATA
 # =========================
-def ema(prices, period):
-    k = 2 / (period + 1)
-    e = prices[0]
-    for p in prices[1:]:
-        e = p * k + e * (1 - k)
-    return e
+def get_data(symbol):
+    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval=1min&outputsize=20&apikey={API_KEY}"
+    return requests.get(url).json()
 
 # =========================
-# RSI PRO
-# =========================
-def rsi(closes):
-    gains, losses = [], []
-
-    for i in range(1, len(closes)):
-        diff = closes[i] - closes[i - 1]
-        if diff > 0:
-            gains.append(diff)
-        else:
-            losses.append(abs(diff))
-
-    avg_gain = sum(gains[-14:]) / 14 if gains else 0
-    avg_loss = sum(losses[-14:]) / 14 if losses else 0
-
-    if avg_loss == 0:
-        return 100
-
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
-
-# =========================
-# COOLDOWN CHECK
-# =========================
-def can_send(symbol):
-    now = time.time()
-    if symbol in last_signal_time and now - last_signal_time[symbol] < 90:
-        return False
-    last_signal_time[symbol] = now
-    return True
-
-# =========================
-# ANALYSE PRO
+# SIMPLE PRO SIGNAL ENGINE
 # =========================
 def analyze(symbol):
 
     try:
-        url = (
-            f"https://api.twelvedata.com/time_series?"
-            f"symbol={symbol}"
-            f"&interval={INTERVAL}"
-            f"&outputsize=40"
-            f"&apikey={API_KEY}"
-        )
+        data = get_data(symbol)
 
-        data = requests.get(url).json()
         if "values" not in data:
             return None
 
@@ -98,38 +67,16 @@ def analyze(symbol):
         high = float(candles[-1]["high"])
         low = float(candles[-1]["low"])
 
-        closes = [float(c["close"]) for c in candles]
+        prev_close = float(candles[-2]["close"])
 
-        ema10 = ema(closes[-10:], 10)
-        ema20 = ema(closes[-20:], 20)
-        r = rsi(closes[-15:])
-
-        # =========================
-        # TREND
-        # =========================
-        trend_up = close > ema20
-        trend_down = close < ema20
-
-        # =========================
-        # PRICE ACTION PRO
-        # =========================
         body = abs(close - open_)
         range_ = high - low
 
-        bullish = close > open_
-        bearish = close < open_
+        trend_up = close > prev_close
+        trend_down = close < prev_close
 
-        rejection_buy = (low - min(close, open_)) > body * 1.2 and bullish
-        rejection_sell = (high - max(close, open_)) > body * 1.2 and bearish
+        volatility = range_ > close * 0.0003
 
-        # =========================
-        # VOLATILITY FILTER
-        # =========================
-        volatility_ok = range_ > close * 0.00025
-
-        # =========================
-        # SCORE SYSTEM PRO
-        # =========================
         call_score = 0
         put_score = 0
 
@@ -139,91 +86,92 @@ def analyze(symbol):
         if trend_down:
             put_score += 1
 
-        # RSI zone (PRO logic)
-        if r > 50:
+        # momentum
+        if close > open_:
             call_score += 1
-        if r < 50:
+        else:
             put_score += 1
 
-        # price action
-        if rejection_buy:
-            call_score += 2
-        if rejection_sell:
-            put_score += 2
-
-        # volatility
-        if volatility_ok:
+        # volatility filter
+        if volatility:
             call_score += 1
             put_score += 1
 
-        # =========================
-        # FINAL SIGNAL FILTER
-        # =========================
-        if call_score >= 4 and can_send(symbol):
-            return (
-                f"📈 PRO CALL SIGNAL\n\n"
-                f"Pair: {symbol}\n"
-                f"RSI: {round(r,2)}\n"
-                f"Score: {call_score}/5\n"
-                f"TF: 1min"
-            )
+        # signal rules
+        if call_score >= 3:
+            return f"📈 CALL SIGNAL\nPair: {symbol}\nScore: {call_score}/3"
 
-        if put_score >= 4 and can_send(symbol):
-            return (
-                f"📉 PRO PUT SIGNAL\n\n"
-                f"Pair: {symbol}\n"
-                f"RSI: {round(r,2)}\n"
-                f"Score: {put_score}/5\n"
-                f"TF: 1min"
-            )
+        if put_score >= 3:
+            return f"📉 PUT SIGNAL\nPair: {symbol}\nScore: {put_score}/3"
 
         return None
 
-    except Exception as e:
-        return f"❌ ERROR: {str(e)}"
+    except:
+        return None
 
 # =========================
-# LOOP PRO
+# SIGNALS MULTI PAIRS
 # =========================
-def loop():
-    while True:
-        for p in PAIRS:
-            res = analyze(p)
+def scan_market():
+    results = []
 
-            if res and not res.startswith("❌"):
-                send_telegram(res)
+    for p in PAIRS:
+        sig = analyze(p)
+        if sig:
+            results.append(sig)
 
-            time.sleep(2)
-
-        time.sleep(40)
+    return results
 
 # =========================
-# ROUTES
+# WEBHOOK
+# =========================
+@app.route("/webhook", methods=["POST"])
+def webhook():
+
+    data = request.get_json()
+
+    # MESSAGE
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"].get("text", "")
+
+        if text == "/start":
+            send_message(chat_id, "🤖 <b>BOT PRO ACTIF</b>\nChoisis une option :", menu())
+
+        elif text == "/signal":
+            signals = scan_market()
+            send_message(chat_id, "\n\n".join(signals) if signals else "NO SIGNAL")
+
+        elif text == "/status":
+            send_message(chat_id, "✅ BOT ONLINE & RUNNING")
+
+    # CALLBACK BUTTONS
+    if "callback_query" in data:
+        chat_id = data["callback_query"]["message"]["chat"]["id"]
+        action = data["callback_query"]["data"]
+
+        if action == "signals":
+            signals = scan_market()
+            send_message(chat_id, "\n\n".join(signals) if signals else "NO SIGNAL")
+
+        elif action == "status":
+            send_message(chat_id, "✅ STATUS: ACTIVE")
+
+        elif action == "pairs":
+            send_message(chat_id, "💱 PAIRS:\nEUR/USD\nGBP/USD\nUSD/JPY")
+
+    return "ok"
+
+# =========================
+# HOME
 # =========================
 @app.route("/")
 def home():
-    return "BOT PRO TRADING ONLINE"
-
-@app.route("/test")
-def test():
-    send_telegram("✅ PRO BOT TEST OK")
-    return "OK"
-
-@app.route("/signal")
-def signal():
-    out = []
-
-    for p in PAIRS:
-        r = analyze(p)
-        if r:
-            send_telegram(r)
-            out.append(r)
-
-    return "\n\n".join(out) if out else "NO SIGNAL"
+    return "BOT PRO ONLINE"
 
 # =========================
 # START
 # =========================
 if __name__ == "__main__":
-    Thread(target=loop, daemon=True).start()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
