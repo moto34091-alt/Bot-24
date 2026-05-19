@@ -79,7 +79,7 @@ def home_kb():
             [{"text": "📊 MARKET", "callback_data": "market"}],
             [{"text": "📡 SIGNALS", "callback_data": "scan"}],
             [{"text": "🌐 LANGUAGE", "callback_data": "lang"}],
-            [{"text": "🌐 DASHBOARD", "url": "http://127.0.0.1:5000/dashboard"}]
+            [{"text": "🌐 DASHBOARD", "url": "https://bot-24-bottoken.up.railway.app"}]
         ]
     }
 
