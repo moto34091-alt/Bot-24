@@ -41,14 +41,87 @@ GOLD_PAIRS = [
 ]
 
 # =====================================================
-# AUTO SIGNAL
+# MEMORY
 # =====================================================
 auto_signal_enabled = True
 
 last_signals = {}
 
+user_languages = {}
+
 # =====================================================
-# TELEGRAM SEND MESSAGE
+# TRANSLATIONS
+# =====================================================
+def get_text(lang, key):
+
+    texts = {
+
+        "fr": {
+
+            "welcome": "🤖 SNIPER BOT ACTIVÉ\n\n💬 Sélectionnez une option:",
+            "language": "🌐 Choisissez votre langue:",
+            "timeframe": "⏰ Choisissez timeframe:",
+            "market": "📊 Choisissez le marché:",
+            "forex": "💱 Marché Forex",
+            "crypto": "🪙 Marché Crypto",
+            "gold": "🥇 Marché Gold"
+
+        },
+
+        "en": {
+
+            "welcome": "🤖 SNIPER BOT ACTIVATED\n\n💬 Select option:",
+            "language": "🌐 Select your language:",
+            "timeframe": "⏰ Choose timeframe:",
+            "market": "📊 Choose market:",
+            "forex": "💱 Forex Market",
+            "crypto": "🪙 Crypto Market",
+            "gold": "🥇 Gold Market"
+
+        },
+
+        "pt": {
+
+            "welcome": "🤖 SNIPER BOT ATIVADO\n\n💬 Selecione uma opção:",
+            "language": "🌐 Escolha seu idioma:",
+            "timeframe": "⏰ Escolha timeframe:",
+            "market": "📊 Escolha mercado:",
+            "forex": "💱 Mercado Forex",
+            "crypto": "🪙 Mercado Crypto",
+            "gold": "🥇 Mercado Gold"
+
+        },
+
+        "sw": {
+
+            "welcome": "🤖 SNIPER BOT IMEWASHWA\n\n💬 Chagua option:",
+            "language": "🌐 Chagua lugha:",
+            "timeframe": "⏰ Chagua timeframe:",
+            "market": "📊 Chagua market:",
+            "forex": "💱 Forex Market",
+            "crypto": "🪙 Crypto Market",
+            "gold": "🥇 Gold Market"
+
+        },
+
+        "ln": {
+
+            "welcome": "🤖 SNIPER BOT EZO SALA\n\n💬 Pona option:",
+            "language": "🌐 Pona monoko:",
+            "timeframe": "⏰ Pona timeframe:",
+            "market": "📊 Pona marché:",
+            "forex": "💱 Forex",
+            "crypto": "🪙 Crypto",
+            "gold": "🥇 Gold"
+
+        }
+
+    }
+
+    return texts.get(lang, texts["en"]).get(key, "")
+
+# =====================================================
+# SEND MESSAGE
 # =====================================================
 def send_message(chat_id, text):
 
@@ -360,9 +433,6 @@ def analyze_pair(symbol):
 
         closes = [float(c["close"]) for c in candles]
 
-        # =================================================
-        # LAST 3 CANDLES
-        # =================================================
         c1 = candles[-1]
         c2 = candles[-2]
         c3 = candles[-3]
@@ -378,35 +448,20 @@ def analyze_pair(symbol):
         close3 = float(c3["close"])
         open3 = float(c3["open"])
 
-        # =================================================
-        # VOLUME
-        # =================================================
         volume1 = float(c1.get("volume", 0))
         volume2 = float(c2.get("volume", 0))
 
         high_volume = volume1 > volume2
 
-        # =================================================
-        # EMA
-        # =================================================
         ema10 = ema(closes[-10:], 10)
         ema20 = ema(closes[-20:], 20)
         ema50 = ema(closes[-50:], 50)
 
-        # =================================================
-        # RSI
-        # =================================================
         current_rsi = rsi(closes[-15:], 14)
 
-        # =================================================
-        # TREND
-        # =================================================
         strong_uptrend = ema10 > ema20 > ema50
         strong_downtrend = ema10 < ema20 < ema50
 
-        # =================================================
-        # BODY
-        # =================================================
         body = abs(close1 - open1)
 
         candle_range = high1 - low1
@@ -425,16 +480,10 @@ def analyze_pair(symbol):
 
         wick_sell = upper_wick > body * 1.5
 
-        # =================================================
-        # MOMENTUM
-        # =================================================
         momentum_up = close1 > close2 > close3
 
         momentum_down = close1 < close2 < close3
 
-        # =================================================
-        # 3 CANDLES
-        # =================================================
         bullish_3 = (
             close1 > open1 and
             close2 > open2 and
@@ -447,14 +496,8 @@ def analyze_pair(symbol):
             close3 < open3
         )
 
-        # =================================================
-        # VOLATILITY
-        # =================================================
         volatility_ok = candle_range > close1 * 0.0007
 
-        # =================================================
-        # SCORE
-        # =================================================
         buy_score = 0
         sell_score = 0
 
@@ -502,16 +545,10 @@ def analyze_pair(symbol):
             buy_score += 1
             sell_score += 1
 
-        # =================================================
-        # POWER
-        # =================================================
         buy_percent = int((buy_score / 9) * 100)
 
         sell_percent = int((sell_score / 9) * 100)
 
-        # =================================================
-        # BUY
-        # =================================================
         if buy_score >= 7:
 
             return (
@@ -526,9 +563,6 @@ def analyze_pair(symbol):
                 f"⏰ Timeframe: {INTERVAL}"
             )
 
-        # =================================================
-        # SELL
-        # =================================================
         if sell_score >= 7:
 
             return (
@@ -622,12 +656,13 @@ def webhook():
 
         text = message.get("text", "")
 
-        # START
         if text == "/start":
+
+            lang = user_languages.get(chat_id, "en")
 
             send_menu(
                 chat_id,
-                "🤖 SNIPER BOT ACTIVÉ\n\n💬 Select option:",
+                get_text(lang, "welcome"),
                 main_menu()
             )
 
@@ -644,37 +679,33 @@ def webhook():
 
         action = callback["data"]
 
+        lang = user_languages.get(chat_id, "en")
+
         # =================================================
-        # LANGUAGE
+        # LANGUAGE MENU
         # =================================================
         if action == "language":
 
             edit_menu(
                 chat_id,
                 message_id,
-                "🌐 Select language:",
+                get_text(lang, "language"),
                 language_menu()
             )
 
-        elif action == "fr":
+        # =================================================
+        # CHANGE LANGUAGE
+        # =================================================
+        elif action in ["fr", "en", "pt", "sw", "ln"]:
 
-            send_message(chat_id, "🇫🇷 Français activé")
+            user_languages[chat_id] = action
 
-        elif action == "en":
-
-            send_message(chat_id, "🇬🇧 English activated")
-
-        elif action == "pt":
-
-            send_message(chat_id, "🇵🇹 Português ativado")
-
-        elif action == "sw":
-
-            send_message(chat_id, "🇨🇩 Swahili activated")
-
-        elif action == "ln":
-
-            send_message(chat_id, "🇨🇩 Lingala activé")
+            edit_menu(
+                chat_id,
+                message_id,
+                get_text(action, "welcome"),
+                main_menu()
+            )
 
         # =================================================
         # EXECUTE
@@ -684,7 +715,7 @@ def webhook():
             edit_menu(
                 chat_id,
                 message_id,
-                "⏰ Choose timeframe:",
+                get_text(lang, "timeframe"),
                 timeframe_menu()
             )
 
@@ -698,7 +729,7 @@ def webhook():
             edit_menu(
                 chat_id,
                 message_id,
-                "📊 Choose market:",
+                get_text(lang, "market"),
                 market_menu()
             )
 
@@ -709,7 +740,7 @@ def webhook():
             edit_menu(
                 chat_id,
                 message_id,
-                "📊 Choose market:",
+                get_text(lang, "market"),
                 market_menu()
             )
 
@@ -721,7 +752,7 @@ def webhook():
             edit_menu(
                 chat_id,
                 message_id,
-                "💱 Forex Market",
+                get_text(lang, "forex"),
                 forex_menu()
             )
 
@@ -733,7 +764,7 @@ def webhook():
             edit_menu(
                 chat_id,
                 message_id,
-                "🪙 Crypto Market",
+                get_text(lang, "crypto"),
                 crypto_menu()
             )
 
@@ -745,12 +776,12 @@ def webhook():
             edit_menu(
                 chat_id,
                 message_id,
-                "🥇 Gold Market",
+                get_text(lang, "gold"),
                 gold_menu()
             )
 
         # =================================================
-        # AUTO ON
+        # AUTO SIGNAL ON
         # =================================================
         elif action == "auto_on":
 
@@ -759,7 +790,7 @@ def webhook():
             send_message(chat_id, "✅ AUTO SIGNAL ACTIVÉ")
 
         # =================================================
-        # AUTO OFF
+        # AUTO SIGNAL OFF
         # =================================================
         elif action == "auto_off":
 
@@ -783,15 +814,18 @@ def webhook():
             )
 
         # =================================================
-        # PAIR SIGNAL
+        # SIGNAL
         # =================================================
         elif "/" in action:
 
             result = analyze_pair(action)
 
             if result:
+
                 send_message(chat_id, result)
+
             else:
+
                 send_message(chat_id, "NO SIGNAL")
 
     return "ok"
@@ -812,4 +846,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=PORT
-            )
+    )
