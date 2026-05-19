@@ -5,7 +5,7 @@ import time
 from threading import Thread
 
 # =====================================================
-# FLASK APP
+# FLASK
 # =====================================================
 app = Flask(__name__)
 
@@ -40,36 +40,29 @@ GOLD_PAIRS = [
     "XAU/USD"
 ]
 
-ALL_PAIRS = FOREX_PAIRS + CRYPTO_PAIRS + GOLD_PAIRS
-
 # =====================================================
-# MEMORY
+# AUTO SIGNAL
 # =====================================================
-last_signals = {}
-
 auto_signal_enabled = True
 
-# =====================================================
-# TELEGRAM MESSAGE
-# =====================================================
-def send_message(text, chat_id):
-
-    try:
-
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-        data = {
-            "chat_id": chat_id,
-            "text": text
-        }
-
-        requests.post(url, json=data)
-
-    except Exception as e:
-        print(e)
+last_signals = {}
 
 # =====================================================
-# TELEGRAM MENU
+# TELEGRAM SEND MESSAGE
+# =====================================================
+def send_message(chat_id, text):
+
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    data = {
+        "chat_id": chat_id,
+        "text": text
+    }
+
+    requests.post(url, json=data)
+
+# =====================================================
+# SEND MENU
 # =====================================================
 def send_menu(chat_id, text, keyboard):
 
@@ -77,6 +70,22 @@ def send_menu(chat_id, text, keyboard):
 
     data = {
         "chat_id": chat_id,
+        "text": text,
+        "reply_markup": keyboard
+    }
+
+    requests.post(url, json=data)
+
+# =====================================================
+# EDIT MENU
+# =====================================================
+def edit_menu(chat_id, message_id, text, keyboard):
+
+    url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
+
+    data = {
+        "chat_id": chat_id,
+        "message_id": message_id,
         "text": text,
         "reply_markup": keyboard
     }
@@ -119,15 +128,15 @@ def main_menu():
 
             [
                 {
-                    "text": "👨‍💻 @Mr_dflam",
-                    "url": "https://t.me/Mr_dflam"
+                    "text": "❓ Aide",
+                    "callback_data": "help"
                 }
             ],
 
             [
                 {
-                    "text": "❓ Aide",
-                    "callback_data": "help"
+                    "text": "👨‍💻 @Mr_dflam",
+                    "url": "https://t.me/Mr_dflam"
                 }
             ]
         ]
@@ -169,6 +178,28 @@ def language_menu():
                 {
                     "text": "🇨🇩 Lingala",
                     "callback_data": "ln"
+                }
+            ]
+        ]
+    }
+
+# =====================================================
+# TIMEFRAME MENU
+# =====================================================
+def timeframe_menu():
+
+    return {
+        "inline_keyboard": [
+
+            [
+                {
+                    "text": "⏰ 15MIN",
+                    "callback_data": "tf15"
+                },
+
+                {
+                    "text": "⏰ 30MIN",
+                    "callback_data": "tf30"
                 }
             ]
         ]
@@ -306,7 +337,7 @@ def rsi(closes, period=14):
     return 100 - (100 / (1 + rs))
 
 # =====================================================
-# ANALYSE PAIR
+# ANALYSE
 # =====================================================
 def analyze_pair(symbol):
 
@@ -316,7 +347,7 @@ def analyze_pair(symbol):
             f"https://api.twelvedata.com/time_series?"
             f"symbol={symbol}"
             f"&interval={INTERVAL}"
-            f"&outputsize=50"
+            f"&outputsize=100"
             f"&apikey={API_KEY}"
         )
 
@@ -329,79 +360,187 @@ def analyze_pair(symbol):
 
         closes = [float(c["close"]) for c in candles]
 
-        current = candles[-1]
-        previous = candles[-2]
+        # =================================================
+        # LAST 3 CANDLES
+        # =================================================
+        c1 = candles[-1]
+        c2 = candles[-2]
+        c3 = candles[-3]
 
-        close = float(current["close"])
-        open_ = float(current["open"])
+        close1 = float(c1["close"])
+        open1 = float(c1["open"])
+        high1 = float(c1["high"])
+        low1 = float(c1["low"])
 
-        prev_close = float(previous["close"])
+        close2 = float(c2["close"])
+        open2 = float(c2["open"])
 
+        close3 = float(c3["close"])
+        open3 = float(c3["open"])
+
+        # =================================================
+        # VOLUME
+        # =================================================
+        volume1 = float(c1.get("volume", 0))
+        volume2 = float(c2.get("volume", 0))
+
+        high_volume = volume1 > volume2
+
+        # =================================================
+        # EMA
+        # =================================================
         ema10 = ema(closes[-10:], 10)
         ema20 = ema(closes[-20:], 20)
+        ema50 = ema(closes[-50:], 50)
 
+        # =================================================
+        # RSI
+        # =================================================
         current_rsi = rsi(closes[-15:], 14)
 
-        trend_up = ema10 > ema20
-        trend_down = ema10 < ema20
+        # =================================================
+        # TREND
+        # =================================================
+        strong_uptrend = ema10 > ema20 > ema50
+        strong_downtrend = ema10 < ema20 < ema50
 
-        bullish = close > open_
-        bearish = close < open_
+        # =================================================
+        # BODY
+        # =================================================
+        body = abs(close1 - open1)
 
-        momentum_up = close > prev_close
-        momentum_down = close < prev_close
+        candle_range = high1 - low1
 
-        call_score = 0
-        put_score = 0
+        upper_wick = high1 - max(close1, open1)
 
-        if trend_up:
-            call_score += 1
+        lower_wick = min(close1, open1) - low1
 
-        if trend_down:
-            put_score += 1
+        bullish = close1 > open1
 
-        if current_rsi > 55:
-            call_score += 1
+        bearish = close1 < open1
 
-        if current_rsi < 45:
-            put_score += 1
+        strong_body = body > candle_range * 0.5
 
-        if bullish:
-            call_score += 1
+        wick_buy = lower_wick > body * 1.5
 
-        if bearish:
-            put_score += 1
+        wick_sell = upper_wick > body * 1.5
+
+        # =================================================
+        # MOMENTUM
+        # =================================================
+        momentum_up = close1 > close2 > close3
+
+        momentum_down = close1 < close2 < close3
+
+        # =================================================
+        # 3 CANDLES
+        # =================================================
+        bullish_3 = (
+            close1 > open1 and
+            close2 > open2 and
+            close3 > open3
+        )
+
+        bearish_3 = (
+            close1 < open1 and
+            close2 < open2 and
+            close3 < open3
+        )
+
+        # =================================================
+        # VOLATILITY
+        # =================================================
+        volatility_ok = candle_range > close1 * 0.0007
+
+        # =================================================
+        # SCORE
+        # =================================================
+        buy_score = 0
+        sell_score = 0
+
+        if strong_uptrend:
+            buy_score += 2
+
+        if strong_downtrend:
+            sell_score += 2
+
+        if current_rsi > 60:
+            buy_score += 1
+
+        if current_rsi < 40:
+            sell_score += 1
+
+        if bullish and strong_body:
+            buy_score += 1
+
+        if bearish and strong_body:
+            sell_score += 1
 
         if momentum_up:
-            call_score += 1
+            buy_score += 1
 
         if momentum_down:
-            put_score += 1
+            sell_score += 1
+
+        if bullish_3:
+            buy_score += 1
+
+        if bearish_3:
+            sell_score += 1
+
+        if wick_buy:
+            buy_score += 1
+
+        if wick_sell:
+            sell_score += 1
+
+        if high_volume:
+            buy_score += 1
+            sell_score += 1
+
+        if volatility_ok:
+            buy_score += 1
+            sell_score += 1
 
         # =================================================
-        # CALL SIGNAL
+        # POWER
         # =================================================
-        if call_score >= 3:
+        buy_percent = int((buy_score / 9) * 100)
+
+        sell_percent = int((sell_score / 9) * 100)
+
+        # =================================================
+        # BUY
+        # =================================================
+        if buy_score >= 7:
 
             return (
-                f"🔥 SNIPER CALL\n\n"
+                f"🟢 BUY SIGNAL\n\n"
                 f"💱 Pair: {symbol}\n"
-                f"📈 RSI: {round(current_rsi,2)}\n"
-                f"🔥 Score: {call_score}/4\n"
-                f"⏰ Timeframe: 15MIN"
+                f"📈 Trend: BULLISH\n"
+                f"📊 RSI: {round(current_rsi,2)}\n"
+                f"⚡ Momentum: UP\n"
+                f"📦 Volume: HIGH\n"
+                f"🕯 Wick: BUY PRESSURE\n"
+                f"🔥 Power: {buy_percent}%\n"
+                f"⏰ Timeframe: {INTERVAL}"
             )
 
         # =================================================
-        # PUT SIGNAL
+        # SELL
         # =================================================
-        if put_score >= 3:
+        if sell_score >= 7:
 
             return (
-                f"⚡ SNIPER PUT\n\n"
+                f"🔴 SELL SIGNAL\n\n"
                 f"💱 Pair: {symbol}\n"
-                f"📉 RSI: {round(current_rsi,2)}\n"
-                f"🔥 Score: {put_score}/4\n"
-                f"⏰ Timeframe: 15MIN"
+                f"📉 Trend: BEARISH\n"
+                f"📊 RSI: {round(current_rsi,2)}\n"
+                f"⚡ Momentum: DOWN\n"
+                f"📦 Volume: HIGH\n"
+                f"🕯 Wick: SELL PRESSURE\n"
+                f"🔥 Power: {sell_percent}%\n"
+                f"⏰ Timeframe: {INTERVAL}"
             )
 
         return None
@@ -423,7 +562,7 @@ def auto_signals():
 
             if auto_signal_enabled:
 
-                for pair in ALL_PAIRS:
+                for pair in FOREX_PAIRS + CRYPTO_PAIRS + GOLD_PAIRS:
 
                     signal = analyze_pair(pair)
 
@@ -431,7 +570,7 @@ def auto_signals():
 
                         if signal not in last_signals:
 
-                            send_message(signal, CHAT_ID)
+                            send_message(CHAT_ID, signal)
 
                             last_signals[signal] = time.time()
 
@@ -449,10 +588,7 @@ def auto_signals():
 
         except Exception as e:
 
-            send_message(
-                f"BOT ERROR:\n{str(e)}",
-                CHAT_ID
-            )
+            send_message(CHAT_ID, f"BOT ERROR:\n{str(e)}")
 
         time.sleep(300)
 
@@ -470,6 +606,7 @@ def home():
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
+    global INTERVAL
     global auto_signal_enabled
 
     data = request.get_json()
@@ -485,9 +622,7 @@ def webhook():
 
         text = message.get("text", "")
 
-        # =============================================
         # START
-        # =============================================
         if text == "/start":
 
             send_menu(
@@ -496,46 +631,8 @@ def webhook():
                 main_menu()
             )
 
-        # =============================================
-        # STATUS
-        # =============================================
-        elif text == "/status":
-
-            send_message(
-                "✅ BOT ONLINE",
-                chat_id
-            )
-
-        # =============================================
-        # SIGNAL
-        # =============================================
-        elif text == "/signal":
-
-            results = []
-
-            for pair in ALL_PAIRS:
-
-                result = analyze_pair(pair)
-
-                if result:
-                    results.append(result)
-
-            if results:
-
-                send_message(
-                    "\n\n".join(results),
-                    chat_id
-                )
-
-            else:
-
-                send_message(
-                    "NO SIGNAL",
-                    chat_id
-                )
-
     # =================================================
-    # CALLBACK BUTTONS
+    # CALLBACK
     # =================================================
     if "callback_query" in data:
 
@@ -543,164 +640,164 @@ def webhook():
 
         chat_id = callback["message"]["chat"]["id"]
 
+        message_id = callback["message"]["message_id"]
+
         action = callback["data"]
 
-        # =============================================
+        # =================================================
         # LANGUAGE
-        # =============================================
+        # =================================================
         if action == "language":
 
-            send_menu(
+            edit_menu(
                 chat_id,
-                "🌐 Select your language:",
+                message_id,
+                "🌐 Select language:",
                 language_menu()
             )
 
-        # =============================================
-        # LANGUAGES
-        # =============================================
         elif action == "fr":
 
-            send_message(
-                "🇫🇷 Français activé",
-                chat_id
-            )
+            send_message(chat_id, "🇫🇷 Français activé")
 
         elif action == "en":
 
-            send_message(
-                "🇬🇧 English activated",
-                chat_id
-            )
+            send_message(chat_id, "🇬🇧 English activated")
 
         elif action == "pt":
 
-            send_message(
-                "🇵🇹 Português ativado",
-                chat_id
-            )
+            send_message(chat_id, "🇵🇹 Português ativado")
 
         elif action == "sw":
 
-            send_message(
-                "🇨🇩 Swahili activated",
-                chat_id
-            )
+            send_message(chat_id, "🇨🇩 Swahili activated")
 
         elif action == "ln":
 
-            send_message(
-                "🇨🇩 Lingala activé",
-                chat_id
-            )
+            send_message(chat_id, "🇨🇩 Lingala activé")
 
-        # =============================================
+        # =================================================
         # EXECUTE
-        # =============================================
+        # =================================================
         elif action == "execute":
 
-            send_menu(
+            edit_menu(
                 chat_id,
-                "📊 Choisissez le marché :",
+                message_id,
+                "⏰ Choose timeframe:",
+                timeframe_menu()
+            )
+
+        # =================================================
+        # TIMEFRAME
+        # =================================================
+        elif action == "tf15":
+
+            INTERVAL = "15min"
+
+            edit_menu(
+                chat_id,
+                message_id,
+                "📊 Choose market:",
                 market_menu()
             )
 
-        # =============================================
+        elif action == "tf30":
+
+            INTERVAL = "30min"
+
+            edit_menu(
+                chat_id,
+                message_id,
+                "📊 Choose market:",
+                market_menu()
+            )
+
+        # =================================================
         # FOREX
-        # =============================================
+        # =================================================
         elif action == "forex":
 
-            send_menu(
+            edit_menu(
                 chat_id,
+                message_id,
                 "💱 Forex Market",
                 forex_menu()
             )
 
-        # =============================================
+        # =================================================
         # CRYPTO
-        # =============================================
+        # =================================================
         elif action == "crypto":
 
-            send_menu(
+            edit_menu(
                 chat_id,
+                message_id,
                 "🪙 Crypto Market",
                 crypto_menu()
             )
 
-        # =============================================
+        # =================================================
         # GOLD
-        # =============================================
+        # =================================================
         elif action == "gold":
 
-            send_menu(
+            edit_menu(
                 chat_id,
+                message_id,
                 "🥇 Gold Market",
                 gold_menu()
             )
 
-        # =============================================
-        # AUTO SIGNAL ON
-        # =============================================
+        # =================================================
+        # AUTO ON
+        # =================================================
         elif action == "auto_on":
 
             auto_signal_enabled = True
 
-            send_message(
-                "✅ AUTO SIGNAL ACTIVÉ",
-                chat_id
-            )
+            send_message(chat_id, "✅ AUTO SIGNAL ACTIVÉ")
 
-        # =============================================
-        # AUTO SIGNAL OFF
-        # =============================================
+        # =================================================
+        # AUTO OFF
+        # =================================================
         elif action == "auto_off":
 
             auto_signal_enabled = False
 
-            send_message(
-                "🛑 AUTO SIGNAL DÉSACTIVÉ",
-                chat_id
-            )
+            send_message(chat_id, "🛑 AUTO SIGNAL DÉSACTIVÉ")
 
-        # =============================================
+        # =================================================
         # HELP
-        # =============================================
+        # =================================================
         elif action == "help":
 
             send_message(
+                chat_id,
                 "❓ AIDE\n\n"
                 "🚀 Exécuter → Scanner marché\n"
-                "📡 Auto Signal → Signaux automatiques\n"
                 "💱 Forex + Crypto + Gold\n"
-                "🌐 Multi-langues",
-                chat_id
+                "📡 Auto Signal disponible\n"
+                "⏰ 15MIN et 30MIN\n"
+                "📊 Momentum + RSI + Volume"
             )
 
-        # =============================================
-        # SIGNAL PAR PAIRE
-        # =============================================
+        # =================================================
+        # PAIR SIGNAL
+        # =================================================
         elif "/" in action:
 
             result = analyze_pair(action)
 
             if result:
-
-                send_message(
-                    result,
-                    chat_id
-                )
-
+                send_message(chat_id, result)
             else:
-
-                send_message(
-                    "NO SIGNAL",
-                    chat_id
-                )
+                send_message(chat_id, "NO SIGNAL")
 
     return "ok"
 
 # =====================================================
-# START BOT
+# RUN
 # =====================================================
 if __name__ == "__main__":
 
