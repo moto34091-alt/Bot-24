@@ -1,17 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>HEDGE FUND DASHBOARD</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>HEDGE FUND AI</title>
 <style>
 body{background:#0b0f1a;color:white;font-family:Arial}
-.box{width:90%;margin:auto}
-.signal{background:#1c1f33;margin:10px;padding:10px;border-radius:10px}
+.card{background:#1b2235;margin:10px;padding:10px;border-radius:10px}
 </style>
 </head>
 <body>
 
-<h2 style="text-align:center">🏦 HEDGE FUND AI</h2>
+<h2>🏦 HEDGE FUND DASHBOARD</h2>
 
 <select id="m" onchange="load()">
 <option value="forex">Forex</option>
@@ -19,26 +17,34 @@ body{background:#0b0f1a;color:white;font-family:Arial}
 <option value="gold">Gold</option>
 </select>
 
-<div id="s"></div>
+<div id="out"></div>
 
 <script>
 
 async function load(){
 
-let r = await fetch("/api/signals?market="+document.getElementById("m").value);
+let m = document.getElementById("m").value;
+
+let r = await fetch("/api/signals?market="+m);
 let d = await r.json();
 
-let box = document.getElementById("s");
+let box = document.getElementById("out");
 box.innerHTML = "";
 
 d.forEach(x=>{
-box.innerHTML += `<div class="signal">${x.direction} ${x.pair} ${x.probability}%</div>`;
+box.innerHTML += `
+<div class="card">
+<b>${x.direction}</b><br>
+${x.pair}<br>
+🔥 ${x.probability}%
+</div>
+`;
 });
 
 }
 
 load();
-setInterval(load,4000);
+setInterval(load,5000);
 
 </script>
 
