@@ -10,28 +10,55 @@ app = Flask(__name__)
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
-PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"]
+PAIRS = [
+    "EUR/USD",
+    "GBP/USD",
+    "USD/JPY",
+    "AUD/USD"
+]
 
 # =========================
-# HOME ROUTE (IMPORTANT)
+# HOME ROUTE
 # =========================
 @app.route("/")
 def home():
     return "BOT ONLINE OK"
 
 # =========================
-# TELEGRAM SEND
+# START ROUTE (WEB)
 # =========================
-def send_message(chat_id, text):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": chat_id, "text": text})
+@app.route("/start")
+def start_page():
+    return "BOT START OK"
 
 # =========================
-# SIMPLE MARKET ANALYSIS
+# STATUS ROUTE
+# =========================
+@app.route("/status")
+def status():
+    return "BOT STATUS ONLINE"
+
+# =========================
+# TELEGRAM SEND MESSAGE
+# =========================
+def send_message(chat_id, text):
+
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    data = {
+        "chat_id": chat_id,
+        "text": text
+    }
+
+    requests.post(url, data=data)
+
+# =========================
+# ANALYSE SIMPLE
 # =========================
 def analyze(symbol):
 
     try:
+
         url = (
             f"https://api.twelvedata.com/time_series?"
             f"symbol={symbol}"
@@ -40,45 +67,79 @@ def analyze(symbol):
             f"&apikey={API_KEY}"
         )
 
-        data = requests.get(url).json()
+        response = requests.get(url).json()
 
-        if "values" not in data:
+        if "values" not in response:
             return None
 
-        candles = data["values"][::-1]
+        candles = response["values"][::-1]
 
         close = float(candles[-1]["close"])
         open_ = float(candles[-1]["open"])
-        prev_close = float(candles[-2]["close"])
+
+        previous_close = float(candles[-2]["close"])
 
         # =========================
-        # TREND SIMPLE
+        # TREND
         # =========================
-        if close > prev_close:
-            return f"📈 CALL SIGNAL\nPair: {symbol}"
-        elif close < prev_close:
-            return f"📉 PUT SIGNAL\nPair: {symbol}"
+        bullish = close > previous_close and close > open_
+        bearish = close < previous_close and close < open_
+
+        # =========================
+        # SIGNALS
+        # =========================
+        if bullish:
+            return (
+                f"📈 CALL SIGNAL\n\n"
+                f"Pair: {symbol}\n"
+                f"Trend: UP\n"
+                f"Timeframe: 1min"
+            )
+
+        if bearish:
+            return (
+                f"📉 PUT SIGNAL\n\n"
+                f"Pair: {symbol}\n"
+                f"Trend: DOWN\n"
+                f"Timeframe: 1min"
+            )
 
         return None
 
-    except:
-        return None
+    except Exception as e:
+        return f"ERROR: {str(e)}"
 
 # =========================
-# SCAN ALL PAIRS
+# SCAN MARKET
 # =========================
 def scan_market():
+
     signals = []
 
-    for p in PAIRS:
-        sig = analyze(p)
-        if sig:
-            signals.append(sig)
+    for pair in PAIRS:
+
+        result = analyze(pair)
+
+        if result and not result.startswith("ERROR"):
+            signals.append(result)
 
     return signals
 
 # =========================
-# WEBHOOK TELEGRAM
+# SIGNAL ROUTE
+# =========================
+@app.route("/signal")
+def signal_route():
+
+    signals = scan_market()
+
+    if signals:
+        return "\n\n".join(signals)
+
+    return "NO SIGNAL"
+
+# =========================
+# TELEGRAM WEBHOOK
 # =========================
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -86,28 +147,62 @@ def webhook():
     data = request.get_json()
 
     if "message" in data:
+
         chat_id = data["message"]["chat"]["id"]
+
         text = data["message"].get("text", "")
 
+        # =========================
+        # /START
+        # =========================
         if text == "/start":
-            send_message(chat_id,
+
+            send_message(
+                chat_id,
                 "🤖 BOT PRO ACTIF\n\n"
-                "/signal → voir les signaux\n"
-                "/status → statut bot"
+                "Commandes disponibles:\n"
+                "/signal - Voir les signaux\n"
+                "/status - Vérifier le bot"
             )
 
-        elif text == "/signal":
-            signals = scan_market()
-            send_message(chat_id, "\n\n".join(signals) if signals else "NO SIGNAL")
-
+        # =========================
+        # /STATUS
+        # =========================
         elif text == "/status":
-            send_message(chat_id, "✅ BOT ONLINE")
+
+            send_message(
+                chat_id,
+                "✅ BOT ONLINE"
+            )
+
+        # =========================
+        # /SIGNAL
+        # =========================
+        elif text == "/signal":
+
+            signals = scan_market()
+
+            if signals:
+                send_message(
+                    chat_id,
+                    "\n\n".join(signals)
+                )
+            else:
+                send_message(
+                    chat_id,
+                    "NO SIGNAL"
+                )
 
     return "ok"
 
 # =========================
-# START SERVER (RAILWAY FIX)
+# START SERVER
 # =========================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+
+    PORT = int(os.environ.get("PORT", 5000))
+
+    app.run(
+        host="0.0.0.0",
+        port=PORT
+    )
