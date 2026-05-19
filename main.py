@@ -18,7 +18,6 @@ API_KEY = os.getenv("TWELVE_API_KEY")
 # =====================================================
 
 USER = {}
-
 AUTO_USERS = {}
 
 # =====================================================
@@ -48,6 +47,16 @@ PAIRS = {
 # =====================================================
 # TELEGRAM
 # =====================================================
+
+def typing(chat_id):
+
+    requests.post(
+        f"https://api.telegram.org/bot{TOKEN}/sendChatAction",
+        json={
+            "chat_id": chat_id,
+            "action": "typing"
+        }
+    )
 
 def send(chat_id, text, keyboard=None):
 
@@ -84,6 +93,7 @@ def edit(chat_id, msg_id, text, keyboard=None):
 
 @app.route("/")
 def home():
+
     return "🏦 HEDGE FUND BOT RUNNING"
 
 @app.route("/dashboard")
@@ -369,7 +379,7 @@ def analyze(symbol):
     }
 
 # =====================================================
-# SIGNAL FORMAT
+# SIGNAL CARD
 # =====================================================
 
 def signal_card(data):
@@ -432,6 +442,8 @@ def auto_loop():
 
                     if data and data["prob"] >= 80:
 
+                        typing(chat_id)
+
                         send(chat_id, signal_card(data))
 
                         time.sleep(2)
@@ -472,7 +484,18 @@ def webhook():
                 "market": "forex"
             }
 
-        if text in ["/start", "/star", "start"]:
+        # =============================================
+        # SMART START
+        # =============================================
+
+        if (
+            text.startswith("/start")
+            or text.startswith("/star")
+            or text == "start"
+            or text == "menu"
+        ):
+
+            typing(chat_id)
 
             lang = USER[chat_id]["lang"]
 
@@ -507,6 +530,8 @@ def webhook():
 
         if action == "home":
 
+            typing(chat_id)
+
             lang = USER[chat_id]["lang"]
 
             title, kb = app_menu(lang)
@@ -518,6 +543,8 @@ def webhook():
         # =========================
 
         elif action == "market":
+
+            typing(chat_id)
 
             lang = USER[chat_id]["lang"]
 
@@ -531,15 +558,19 @@ def webhook():
 
         elif action == "language":
 
+            typing(chat_id)
+
             title, kb = language_menu()
 
             edit(chat_id, msg_id, title, kb)
 
         # =========================
-        # CHANGE LANG
+        # CHANGE LANGUAGE
         # =========================
 
         elif action == "lang_en":
+
+            typing(chat_id)
 
             USER[chat_id]["lang"] = "en"
 
@@ -549,6 +580,8 @@ def webhook():
 
         elif action == "lang_fr":
 
+            typing(chat_id)
+
             USER[chat_id]["lang"] = "fr"
 
             title, kb = app_menu("fr")
@@ -556,10 +589,12 @@ def webhook():
             edit(chat_id, msg_id, title, kb)
 
         # =========================
-        # SELECT MARKET
+        # MARKET SELECT
         # =========================
 
         elif action in ["forex", "crypto", "gold"]:
+
+            typing(chat_id)
 
             USER[chat_id]["market"] = action
 
@@ -579,6 +614,8 @@ def webhook():
         # =========================
 
         elif action == "signals":
+
+            typing(chat_id)
 
             market = USER[chat_id]["market"]
 
@@ -611,6 +648,8 @@ def webhook():
 
         elif action == "auto":
 
+            typing(chat_id)
+
             market = USER[chat_id]["market"]
 
             AUTO_USERS[chat_id] = market
@@ -626,6 +665,8 @@ def webhook():
         # =========================
 
         elif action == "settings":
+
+            typing(chat_id)
 
             send(
                 chat_id,
@@ -650,4 +691,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port
-        )
+            )
