@@ -1,311 +1,161 @@
 # =====================================================
-# MENU PRINCIPAL
+# WEBHOOK TELEGRAM
 # =====================================================
-def main_menu():
+@app.route("/webhook", methods=["POST"])
+def webhook():
 
-    return {
-        "inline_keyboard": [
+    data = request.get_json()
 
-            [
-                {
-                    "text": "🚀 Exécuter",
-                    "callback_data": "execute"
-                }
-            ],
+    # =================================================
+    # MESSAGE TELEGRAM
+    # =================================================
+    if "message" in data:
 
-            [
-                {
-                    "text": "🌐 Language settings",
-                    "callback_data": "language"
-                }
-            ],
+        message = data["message"]
 
-            [
-                {
-                    "text": "📡 Auto Signal ON",
-                    "callback_data": "auto_on"
-                },
+        chat_id = message["chat"]["id"]
 
-                {
-                    "text": "🛑 Auto Signal OFF",
-                    "callback_data": "auto_off"
-                }
-            ],
+        text = message.get("text", "")
 
-            [
-                {
-                    "text": "👨‍💻 @Mr_dflam",
-                    "url": "https://t.me/Mr_dflam"
-                }
-            ],
+        # =============================================
+        # START
+        # =============================================
+        if text == "/start":
 
-            [
-                {
-                    "text": "❓ Aide",
-                    "callback_data": "help"
-                }
-            ]
-        ]
-    }
+            url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-# =====================================================
-# MENU LANGUES
-# =====================================================
-def language_menu():
+            send_data = {
+                "chat_id": chat_id,
+                "text":
+                "🤖 SNIPER BOT ACTIVÉ\n\n"
+                "💬 Select option:",
+                "reply_markup": main_menu()
+            }
 
-    return {
-        "inline_keyboard": [
+            requests.post(url, json=send_data)
 
-            [
-                {
-                    "text": "🇫🇷 Français",
-                    "callback_data": "lang_fr"
-                },
+        # =============================================
+        # STATUS
+        # =============================================
+        elif text == "/status":
 
-                {
-                    "text": "🇬🇧 English",
-                    "callback_data": "lang_en"
-                }
-            ],
+            send_message("✅ BOT ONLINE")
 
-            [
-                {
-                    "text": "🇵🇹 Português",
-                    "callback_data": "lang_pt"
-                },
+        # =============================================
+        # SIGNAL
+        # =============================================
+        elif text == "/signal":
 
-                {
-                    "text": "🇨🇩 Swahili",
-                    "callback_data": "lang_sw"
-                }
-            ],
+            signals = scan_market()
 
-            [
-                {
-                    "text": "🇨🇩 Lingala",
-                    "callback_data": "lang_ln"
-                }
-            ]
-        ]
-    }
+            if signals:
 
-# =====================================================
-# CHOIX MARCHÉ
-# =====================================================
-def market_menu():
+                send_message("\n\n".join(signals))
 
-    return {
-        "inline_keyboard": [
+            else:
 
-            [
-                {
-                    "text": "💱 Forex",
-                    "callback_data": "market_forex"
-                },
+                send_message("NO SIGNAL")
 
-                {
-                    "text": "🪙 Crypto",
-                    "callback_data": "market_crypto"
-                }
-            ],
+    # =================================================
+    # CALLBACK BUTTONS
+    # =================================================
+    if "callback_query" in data:
 
-            [
-                {
-                    "text": "🥇 Gold",
-                    "callback_data": "market_gold"
-                },
+        callback = data["callback_query"]
 
-                {
-                    "text": "📈 Indices",
-                    "callback_data": "market_indices"
-                }
-            ]
-        ]
-    }
+        chat_id = callback["message"]["chat"]["id"]
 
-# =====================================================
-# FOREX MENU
-# =====================================================
-def forex_menu():
+        action = callback["data"]
 
-    return {
-        "inline_keyboard": [
+        # =============================================
+        # LANGUAGE MENU
+        # =============================================
+        if action == "language":
 
-            [
-                {
-                    "text": "EUR/USD",
-                    "callback_data": "EUR/USD"
-                },
+            send_menu = {
+                "chat_id": chat_id,
+                "text": "🌐 Language settings\n\n💬 Select your language:",
+                "reply_markup": language_menu()
+            }
 
-                {
-                    "text": "GBP/USD",
-                    "callback_data": "GBP/USD"
-                }
-            ],
+            requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+                json=send_menu
+            )
 
-            [
-                {
-                    "text": "USD/JPY",
-                    "callback_data": "USD/JPY"
-                },
+        # =============================================
+        # EXECUTE
+        # =============================================
+        elif action == "execute":
 
-                {
-                    "text": "AUD/USD",
-                    "callback_data": "AUD/USD"
-                }
-            ]
-        ]
-    }
+            send_menu = {
+                "chat_id": chat_id,
+                "text": "📊 Choisissez un marché :",
+                "reply_markup": market_menu()
+            }
 
-# =====================================================
-# CRYPTO MENU
-# =====================================================
-def crypto_menu():
+            requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+                json=send_menu
+            )
 
-    return {
-        "inline_keyboard": [
+        # =============================================
+        # FOREX MENU
+        # =============================================
+        elif action == "market_forex":
 
-            [
-                {
-                    "text": "BTC/USD",
-                    "callback_data": "BTC/USD"
-                },
+            send_menu = {
+                "chat_id": chat_id,
+                "text": "💱 Choisissez une paire Forex :",
+                "reply_markup": forex_menu()
+            }
 
-                {
-                    "text": "ETH/USD",
-                    "callback_data": "ETH/USD"
-                }
-            ],
+            requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+                json=send_menu
+            )
 
-            [
-                {
-                    "text": "SOL/USD",
-                    "callback_data": "SOL/USD"
-                },
+        # =============================================
+        # CRYPTO MENU
+        # =============================================
+        elif action == "market_crypto":
 
-                {
-                    "text": "XRP/USD",
-                    "callback_data": "XRP/USD"
-                }
-            ]
-        ]
-    }
+            send_menu = {
+                "chat_id": chat_id,
+                "text": "🪙 Choisissez une Crypto :",
+                "reply_markup": crypto_menu()
+            }
 
-# =====================================================
-# START COMMAND
-# =====================================================
-if text == "/start":
+            requests.post(
+                f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+                json=send_menu
+            )
 
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        # =============================================
+        # AUTO SIGNAL ON
+        # =============================================
+        elif action == "auto_on":
 
-    data_send = {
-        "chat_id": chat_id,
-        "text":
-        "🤖 SNIPER BOT ACTIVÉ\n\n"
-        "💬: Select your language:",
-        "reply_markup": main_menu()
-    }
+            send_message("✅ AUTO SIGNAL ACTIVÉ")
 
-    requests.post(url, json=data_send)
+        # =============================================
+        # AUTO SIGNAL OFF
+        # =============================================
+        elif action == "auto_off":
 
-# =====================================================
-# CALLBACK BUTTONS
-# =====================================================
-if "callback_query" in data:
+            send_message("🛑 AUTO SIGNAL DÉSACTIVÉ")
 
-    callback = data["callback_query"]
+        # =============================================
+        # HELP
+        # =============================================
+        elif action == "help":
 
-    chat_id = callback["message"]["chat"]["id"]
+            send_message(
+                "❓ AIDE\n\n"
+                "🚀 Exécuter → scanner\n"
+                "📡 Auto Signal → signaux auto\n"
+                "🌐 Langues → changer langue\n"
+                "💱 Forex & Crypto disponibles"
+            )
 
-    action = callback["data"]
-
-    # ==========================================
-    # LANGUAGE
-    # ==========================================
-    if action == "language":
-
-        send_menu = {
-            "chat_id": chat_id,
-            "text": "🌐 Language settings\n\n💬: Select your language:",
-            "reply_markup": language_menu()
-        }
-
-        requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            json=send_menu
-        )
-
-    # ==========================================
-    # EXECUTE
-    # ==========================================
-    elif action == "execute":
-
-        send_menu = {
-            "chat_id": chat_id,
-            "text": "📊 Choisissez un marché :",
-            "reply_markup": market_menu()
-        }
-
-        requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            json=send_menu
-        )
-
-    # ==========================================
-    # FOREX
-    # ==========================================
-    elif action == "market_forex":
-
-        send_menu = {
-            "chat_id": chat_id,
-            "text": "💱 Choisissez une paire Forex :",
-            "reply_markup": forex_menu()
-        }
-
-        requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            json=send_menu
-        )
-
-    # ==========================================
-    # CRYPTO
-    # ==========================================
-    elif action == "market_crypto":
-
-        send_menu = {
-            "chat_id": chat_id,
-            "text": "🪙 Choisissez une Crypto :",
-            "reply_markup": crypto_menu()
-        }
-
-        requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            json=send_menu
-        )
-
-    # ==========================================
-    # AUTO SIGNAL ON
-    # ==========================================
-    elif action == "auto_on":
-
-        send_message("✅ AUTO SIGNAL ACTIVÉ")
-
-    # ==========================================
-    # AUTO SIGNAL OFF
-    # ==========================================
-    elif action == "auto_off":
-
-        send_message("🛑 AUTO SIGNAL DÉSACTIVÉ")
-
-    # ==========================================
-    # HELP
-    # ==========================================
-    elif action == "help":
-
-        send_message(
-            "❓ AIDE\n\n"
-            "🚀 Exécuter → lancer scanner\n"
-            "📡 Auto Signal → signaux automatiques\n"
-            "🌐 Langues → changer langue\n"
-            "💱 Forex & Crypto disponibles"
-        )
+    return "ok"
