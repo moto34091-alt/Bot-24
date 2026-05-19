@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>SNIPER AI DASHBOARD</title>
+<title>HEDGE FUND DASHBOARD</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{background:#0b0f1a;color:white;font-family:Arial}
@@ -11,7 +11,7 @@ body{background:#0b0f1a;color:white;font-family:Arial}
 </head>
 <body>
 
-<h2 style="text-align:center">📊 SNIPER AI PRO DASHBOARD</h2>
+<h2 style="text-align:center">🏦 HEDGE FUND AI</h2>
 
 <select id="m" onchange="load()">
 <option value="forex">Forex</option>
@@ -19,51 +19,24 @@ body{background:#0b0f1a;color:white;font-family:Arial}
 <option value="gold">Gold</option>
 </select>
 
-<div class="box">
-<canvas id="c"></canvas>
-</div>
-
 <div id="s"></div>
 
 <script>
 
-let chart;
-
-function init(){
-
-chart=new Chart(document.getElementById("c"),{
-type:"line",
-data:{labels:[],datasets:[{data:[],borderColor:"lime"}]}
-});
-
-}
-
 async function load(){
 
-let r=await fetch("/api/signals?market="+document.getElementById("m").value);
-let d=await r.json();
+let r = await fetch("/api/signals?market="+document.getElementById("m").value);
+let d = await r.json();
 
-let box=document.getElementById("s");
-box.innerHTML="";
-
-let l=[],v=[];
+let box = document.getElementById("s");
+box.innerHTML = "";
 
 d.forEach(x=>{
-
-box.innerHTML+=`<div class="signal">${x.direction} ${x.pair} ${x.probability}%</div>`;
-
-l.push(x.pair);
-v.push(x.probability);
-
+box.innerHTML += `<div class="signal">${x.direction} ${x.pair} ${x.probability}%</div>`;
 });
-
-chart.data.labels=l;
-chart.data.datasets[0].data=v;
-chart.update();
 
 }
 
-init();
 load();
 setInterval(load,4000);
 
