@@ -7,67 +7,55 @@ from threading import Thread
 app = Flask(__name__)
 
 # =========================
-# VARIABLES ENV
+# CONFIG
 # =========================
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
-# =========================
-# CONFIG
-# =========================
-PAIRS = [
-    "EUR/USD",
-    "GBP/USD",
-    "USD/JPY",
-    "AUD/USD"
-]
-
+PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"]
 INTERVAL = "1min"
+
+# =========================
+# ANTI SPAM (PRO FEATURE)
+# =========================
+last_signal_time = {}
 
 # =========================
 # TELEGRAM
 # =========================
-def send_telegram(message):
+def send_telegram(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        data = {
-            "chat_id": CHAT_ID,
-            "text": message
-        }
-        requests.post(url, data=data)
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
     except:
         pass
 
 # =========================
-# EMA (CORRECT)
+# EMA
 # =========================
-def calculate_ema(prices, period):
+def ema(prices, period):
     k = 2 / (period + 1)
-    ema = prices[0]
-
-    for price in prices[1:]:
-        ema = price * k + ema * (1 - k)
-
-    return ema
+    e = prices[0]
+    for p in prices[1:]:
+        e = p * k + e * (1 - k)
+    return e
 
 # =========================
-# RSI (FIXED)
+# RSI PRO
 # =========================
-def calculate_rsi(closes, period=14):
-    gains = []
-    losses = []
+def rsi(closes):
+    gains, losses = [], []
 
     for i in range(1, len(closes)):
         diff = closes[i] - closes[i - 1]
-
         if diff > 0:
             gains.append(diff)
         else:
             losses.append(abs(diff))
 
-    avg_gain = sum(gains[-period:]) / period if gains else 0
-    avg_loss = sum(losses[-period:]) / period if losses else 0
+    avg_gain = sum(gains[-14:]) / 14 if gains else 0
+    avg_loss = sum(losses[-14:]) / 14 if losses else 0
 
     if avg_loss == 0:
         return 100
@@ -76,112 +64,117 @@ def calculate_rsi(closes, period=14):
     return 100 - (100 / (1 + rs))
 
 # =========================
-# ANALYSE
+# COOLDOWN CHECK
 # =========================
-def analyze_pair(symbol):
+def can_send(symbol):
+    now = time.time()
+    if symbol in last_signal_time and now - last_signal_time[symbol] < 90:
+        return False
+    last_signal_time[symbol] = now
+    return True
+
+# =========================
+# ANALYSE PRO
+# =========================
+def analyze(symbol):
 
     try:
         url = (
             f"https://api.twelvedata.com/time_series?"
             f"symbol={symbol}"
             f"&interval={INTERVAL}"
-            f"&outputsize=30"
+            f"&outputsize=40"
             f"&apikey={API_KEY}"
         )
 
-        response = requests.get(url).json()
-
-        if "values" not in response:
+        data = requests.get(url).json()
+        if "values" not in data:
             return None
 
-        candles = response["values"][::-1]  # IMPORTANT: ordre correct
+        candles = data["values"][::-1]
 
-        close1 = float(candles[-1]["close"])
-        open1 = float(candles[-1]["open"])
-        high1 = float(candles[-1]["high"])
-        low1 = float(candles[-1]["low"])
+        close = float(candles[-1]["close"])
+        open_ = float(candles[-1]["open"])
+        high = float(candles[-1]["high"])
+        low = float(candles[-1]["low"])
 
         closes = [float(c["close"]) for c in candles]
 
-        ema10 = calculate_ema(closes[-10:], 10)
-        ema20 = calculate_ema(closes[-20:], 20)
-        rsi = calculate_rsi(closes[-15:], 14)
+        ema10 = ema(closes[-10:], 10)
+        ema20 = ema(closes[-20:], 20)
+        r = rsi(closes[-15:])
 
         # =========================
         # TREND
         # =========================
-        trend_up = ema10 > ema20
-        trend_down = ema10 < ema20
+        trend_up = close > ema20
+        trend_down = close < ema20
 
         # =========================
-        # CANDLE PATTERN
+        # PRICE ACTION PRO
         # =========================
-        body = abs(close1 - open1)
-        upper_wick = high1 - max(close1, open1)
-        lower_wick = min(close1, open1) - low1
+        body = abs(close - open_)
+        range_ = high - low
 
-        bullish = close1 > open1
-        bearish = close1 < open1
+        bullish = close > open_
+        bearish = close < open_
 
-        hammer = lower_wick > body * 2.5 and bullish
-        shooting_star = upper_wick > body * 2.5 and bearish
-
-        # =========================
-        # VOLUME FIX (FOREX SAFE)
-        # =========================
-        volume1 = abs(high1 - low1)
-        volume2 = abs(
-            float(candles[-2]["high"]) - float(candles[-2]["low"])
-        )
-
-        high_volume = volume1 > volume2
+        rejection_buy = (low - min(close, open_)) > body * 1.2 and bullish
+        rejection_sell = (high - max(close, open_)) > body * 1.2 and bearish
 
         # =========================
-        # VOLATILITY
+        # VOLATILITY FILTER
         # =========================
-        candle_size = high1 - low1
-        volatility_ok = candle_size > (close1 * 0.0005)
-
-        strong_body = body > candle_size * 0.25
+        volatility_ok = range_ > close * 0.00025
 
         # =========================
-        # CALL SIGNAL
+        # SCORE SYSTEM PRO
         # =========================
-        if (
-            trend_up and
-            hammer and
-            high_volume and
-            volatility_ok and
-            strong_body and
-            rsi > 50
-        ):
+        call_score = 0
+        put_score = 0
+
+        # trend
+        if trend_up:
+            call_score += 1
+        if trend_down:
+            put_score += 1
+
+        # RSI zone (PRO logic)
+        if r > 50:
+            call_score += 1
+        if r < 50:
+            put_score += 1
+
+        # price action
+        if rejection_buy:
+            call_score += 2
+        if rejection_sell:
+            put_score += 2
+
+        # volatility
+        if volatility_ok:
+            call_score += 1
+            put_score += 1
+
+        # =========================
+        # FINAL SIGNAL FILTER
+        # =========================
+        if call_score >= 4 and can_send(symbol):
             return (
-                f"📈 CALL SIGNAL\n\n"
+                f"📈 PRO CALL SIGNAL\n\n"
                 f"Pair: {symbol}\n"
-                f"Trend: UP\n"
-                f"RSI: {round(rsi,2)}\n"
-                f"Pattern: HAMMER\n"
-                f"Timeframe: 1min"
+                f"RSI: {round(r,2)}\n"
+                f"Score: {call_score}/5\n"
+                f"TF: 1min"
             )
 
-        # =========================
-        # PUT SIGNAL
-        # =========================
-        if (
-            trend_down and
-            shooting_star and
-            high_volume and
-            volatility_ok and
-            strong_body and
-            rsi < 50
-        ):
+        if put_score >= 4 and can_send(symbol):
             return (
-                f"📉 PUT SIGNAL\n\n"
+                f"📉 PRO PUT SIGNAL\n\n"
                 f"Pair: {symbol}\n"
-                f"Trend: DOWN\n"
-                f"RSI: {round(rsi,2)}\n"
-                f"Pattern: SHOOTING STAR\n"
-                f"Timeframe: 1min"
+                f"RSI: {round(r,2)}\n"
+                f"Score: {put_score}/5\n"
+                f"TF: 1min"
             )
 
         return None
@@ -190,52 +183,47 @@ def analyze_pair(symbol):
         return f"❌ ERROR: {str(e)}"
 
 # =========================
-# BOT LOOP
+# LOOP PRO
 # =========================
-def bot_loop():
+def loop():
     while True:
-        try:
-            for pair in PAIRS:
-                result = analyze_pair(pair)
-                if result and not result.startswith("❌"):
-                    send_telegram(result)
-                time.sleep(3)
+        for p in PAIRS:
+            res = analyze(p)
 
-        except Exception as e:
-            send_telegram(f"❌ BOT ERROR: {str(e)}")
+            if res and not res.startswith("❌"):
+                send_telegram(res)
 
-        time.sleep(60)
+            time.sleep(2)
+
+        time.sleep(40)
 
 # =========================
 # ROUTES
 # =========================
 @app.route("/")
 def home():
-    return "BOT ONLINE"
+    return "BOT PRO TRADING ONLINE"
 
 @app.route("/test")
 def test():
-    send_telegram("✅ BOT TEST SUCCESS")
-    return "TEST OK"
+    send_telegram("✅ PRO BOT TEST OK")
+    return "OK"
 
 @app.route("/signal")
 def signal():
-    messages = []
+    out = []
 
-    for pair in PAIRS:
-        result = analyze_pair(pair)
-        if result:
-            send_telegram(result)
-            messages.append(result)
+    for p in PAIRS:
+        r = analyze(p)
+        if r:
+            send_telegram(r)
+            out.append(r)
 
-    return "\n\n".join(messages) if messages else "NO SIGNAL"
+    return "\n\n".join(out) if out else "NO SIGNAL"
 
 # =========================
-# START BOT
+# START
 # =========================
 if __name__ == "__main__":
-    thread = Thread(target=bot_loop, daemon=True)
-    thread.start()
-
-    PORT = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=PORT)
+    Thread(target=loop, daemon=True).start()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
