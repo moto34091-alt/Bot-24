@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify, render_template
 import requests
 import os
 import time
@@ -13,6 +13,7 @@ TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
 USER = {}
+HISTORY = []
 
 PAIRS = {
     "forex": ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"],
@@ -20,7 +21,7 @@ PAIRS = {
     "gold": ["XAU/USD"]
 }
 
-TF_LIST = {
+TIMEFRAMES = {
     "5min": "5min",
     "15min": "15min",
     "1h": "1h"
@@ -33,10 +34,7 @@ def send(chat_id, text, keyboard=None):
 
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-    data = {
-        "chat_id": chat_id,
-        "text": text
-    }
+    data = {"chat_id": chat_id, "text": text}
 
     if keyboard:
         data["reply_markup"] = keyboard
@@ -44,46 +42,7 @@ def send(chat_id, text, keyboard=None):
     requests.post(url, json=data)
 
 # =========================
-# MENUS
-# =========================
-def main_menu():
-    return {
-        "inline_keyboard": [
-            [{"text": "🚀 Exécuter", "callback_data": "exec"}],
-            [{"text": "🌐 Langue", "callback_data": "lang"}],
-            [{"text": "📊 Marché", "callback_data": "market"}],
-            [{"text": "📡 Auto Signal", "callback_data": "auto"}]
-        ]
-    }
-
-def lang_menu():
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "🇫🇷 FR", "callback_data": "fr"},
-                {"text": "🇬🇧 EN", "callback_data": "en"}
-            ],
-            [
-                {"text": "🇵🇹 PT", "callback_data": "pt"},
-                {"text": "🇸🇼 SW", "callback_data": "sw"},
-                {"text": "🇨🇩 LN", "callback_data": "ln"}
-            ]
-        ]
-    }
-
-def market_menu():
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "💱 Forex", "callback_data": "forex"},
-                {"text": "🪙 Crypto", "callback_data": "crypto"}
-            ],
-            [{"text": "🥇 Gold", "callback_data": "gold"}]
-        ]
-    }
-
-# =========================
-# DATA
+# MARKET DATA
 # =========================
 def candles(symbol, tf):
 
@@ -96,7 +55,7 @@ def candles(symbol, tf):
     return r["values"][::-1]
 
 # =========================
-# ANALYSE TF
+# AI ENGINE (PRO)
 # =========================
 def analyze(data):
 
@@ -120,20 +79,21 @@ def analyze(data):
     momentum_down = close1 < close2 < close3
 
     body = abs(close1 - open1)
+
     strong = body > (close1 * 0.002)
 
     return bullish, bearish, momentum_up, momentum_down, strong
 
 # =========================
-# SIGNAL ENGINE (PRO)
+# SIGNAL ENGINE (IA + FILTER)
 # =========================
 def signal(symbol):
 
     tf = {}
 
-    for k in TF_LIST:
+    for k in TIMEFRAMES:
 
-        data = candles(symbol, TF_LIST[k])
+        data = candles(symbol, TIMEFRAMES[k])
         if not data:
             return None
 
@@ -187,30 +147,29 @@ def signal(symbol):
     return direction, prob, tf, buy, sell
 
 # =========================
-# FORMAT UI
+# FORMAT SIGNAL
 # =========================
-def format_msg(symbol, direction, prob, tf, buy, sell):
+def format(symbol, direction, prob, tf, buy, sell):
 
     emoji = "🟢" if direction == "BUY" else "🔴"
 
     bar = "█" * int(prob / 10) + "░" * (10 - int(prob / 10))
 
-    txt = ""
+    text = ""
 
     for k, v in tf.items():
-
         state = "🟢 Bullish" if v[0] else "🔴 Bearish" if v[1] else "⚪ Neutral"
-        txt += f"{k.upper()} : {state}\n"
+        text += f"{k.upper()} : {state}\n"
 
     return (
         "━━━━━━━━━━━━━━━━━━\n"
         "📊 SNIPER AI PRO\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"{emoji} {direction} SIGNAL\n\n"
+        f"{emoji} {direction}\n\n"
         f"💱 {symbol}\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "MULTI TIMEFRAME\n\n"
-        f"{txt}\n"
+        f"{text}\n"
         "━━━━━━━━━━━━━━━━━━\n"
         f"PROBABILITY: {prob}%\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
@@ -223,7 +182,53 @@ def format_msg(symbol, direction, prob, tf, buy, sell):
     )
 
 # =========================
-# AUTO LOOP
+# DASHBOARD API
+# =========================
+@app.route("/api/signals")
+def api_signals():
+
+    market = request.args.get("market", "forex")
+
+    res = []
+
+    for p in PAIRS.get(market, []):
+
+        s = signal(p)
+
+        if s:
+
+            d, pr, tf, b, se = s
+
+            item = {
+                "pair": p,
+                "direction": d,
+                "probability": pr,
+                "buy": b,
+                "sell": se
+            }
+
+            HISTORY.append(item)
+
+            res.append(item)
+
+    return jsonify(res)
+
+# =========================
+# HISTORY
+# =========================
+@app.route("/api/history")
+def history():
+    return jsonify(HISTORY[-100:])
+
+# =========================
+# DASHBOARD PAGE
+# =========================
+@app.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
+
+# =========================
+# LOOP AUTO SIGNAL
 # =========================
 def loop():
 
@@ -235,13 +240,13 @@ def loop():
 
             for p in PAIRS[market]:
 
-                res = signal(p)
+                s = signal(p)
 
-                if res:
+                if s:
 
-                    d, pr, tf, b, s = res
+                    d, pr, tf, b, se = s
 
-                    send(chat_id, format_msg(p, d, pr, tf, b, s))
+                    send(chat_id, format(p, d, pr, tf, b, se))
 
                 time.sleep(2)
 
@@ -261,54 +266,21 @@ def webhook():
         text = data["message"].get("text", "")
 
         if chat_id not in USER:
-            USER[chat_id] = {"lang": "en", "market": "forex", "auto": False}
+            USER[chat_id] = {"market": "forex"}
 
         if text == "/start":
 
             send(chat_id,
-                "🤖 SNIPER PRO BOT\n\n"
-                "Choisissez une option:",
-                main_menu()
+                "🤖 SNIPER AI PRO SYSTEM\n\n"
+                "📊 Forex / Crypto / Gold\n"
+                "🧠 AI Prediction Engine\n"
+                "📡 Live Signals Active"
             )
-
-    if "callback_query" in data:
-
-        cq = data["callback_query"]
-        chat_id = cq["message"]["chat"]["id"]
-        cb = cq["data"]
-
-        if chat_id not in USER:
-            USER[chat_id] = {"lang": "en", "market": "forex", "auto": False}
-
-        # LANGUAGE
-        if cb == "lang":
-            send(chat_id, "🌐 Langue", lang_menu())
-
-        elif cb in ["fr", "en", "pt", "sw", "ln"]:
-            USER[chat_id]["lang"] = cb
-            send(chat_id, "✅ Langue changée", main_menu())
-
-        # MARKET
-        elif cb == "market":
-            send(chat_id, "📊 Marché", market_menu())
-
-        elif cb in ["forex", "crypto", "gold"]:
-            USER[chat_id]["market"] = cb
-            send(chat_id, f"✅ Marché: {cb.upper()}", main_menu())
-
-        # EXECUTE
-        elif cb == "exec":
-            send(chat_id, "🚀 Scan actif...")
-
-        # AUTO
-        elif cb == "auto":
-            USER[chat_id]["auto"] = not USER[chat_id]["auto"]
-            send(chat_id, f"📡 AUTO: {USER[chat_id]['auto']}")
 
     return "ok"
 
 # =========================
-# START
+# RUN
 # =========================
 if __name__ == "__main__":
 
