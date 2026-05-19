@@ -2,7 +2,6 @@ from flask import Flask, request
 import requests
 import os
 import time
-from threading import Thread
 
 app = Flask(__name__)
 
@@ -10,7 +9,7 @@ TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
 # =========================
-# USER STATE
+# STATE
 # =========================
 USER = {}
 
@@ -21,7 +20,7 @@ PAIRS = {
 }
 
 # =========================
-# TELEGRAM CORE
+# TELEGRAM
 # =========================
 def send(chat_id, text, keyboard=None):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -42,7 +41,7 @@ def edit(chat_id, msg_id, text, keyboard=None):
     requests.post(url, json=data)
 
 # =========================
-# HOME PAGE (IMPORTANT FIX)
+# HOME ROUTE
 # =========================
 @app.route("/")
 def home():
@@ -61,7 +60,7 @@ def dashboard():
         <body style="background:#0d0d0d;color:white;font-family:Arial;text-align:center;padding-top:40px;">
 
             <h1>🏦 DASHBOARD LIVE</h1>
-            <p>📡 Render Bot is Running</p>
+            <p>📡 Bot Render Active</p>
 
             <hr style="width:50%;border:1px solid #333;">
 
@@ -72,8 +71,8 @@ def dashboard():
 
             <hr style="width:50%;border:1px solid #333;">
 
-            <h3>⚡ LIVE MODE</h3>
-            <p>HIGH PROB ONLY SIGNAL SYSTEM</p>
+            <h3>⚡ HIGH PROB SYSTEM</h3>
+            <p>ONLY STRONG SIGNALS ARE SHOWN</p>
 
         </body>
     </html>
@@ -90,7 +89,7 @@ def home_kb():
             [{"text": "🌐 LANGUAGE", "callback_data": "lang"}],
             [{
                 "text": "🌐 DASHBOARD",
-                "url": "https://bot-24-x8en.onrender.com"
+                "url": "https://bot-24-x8en.onrender.com/dashboard"
             }]
         ]
     }
@@ -117,7 +116,7 @@ def lang_kb():
     }
 
 # =========================
-# MARKET DATA
+# PRICE API
 # =========================
 def get_price(symbol):
     try:
@@ -130,7 +129,7 @@ def get_price(symbol):
         return 0, 0
 
 # =========================
-# SIGNAL ENGINE (SIMPLE)
+# SIGNAL ENGINE
 # =========================
 def signal(symbol):
 
@@ -140,7 +139,7 @@ def signal(symbol):
         return None
 
     direction = "BUY" if change > 0 else "SELL"
-    prob = 80 if abs(change) > 0.5 else 65
+    prob = 85 if abs(change) > 0.4 else 70
 
     return direction, prob, price, change
 
@@ -161,7 +160,7 @@ def format_signal(symbol, direction, prob, price, change):
         f"💰 PRICE: {price}\n"
         f"📊 CHANGE: {change}\n"
         f"📡 TREND: {trend}\n\n"
-        f"🧠 PROB: {prob}%\n"
+        f"🧠 PROBABILITY: {prob}%\n"
         "━━━━━━━━━━━━━━━━━━"
     )
 
@@ -179,7 +178,7 @@ def webhook():
         text = data["message"].get("text", "")
 
         if chat_id not in USER:
-            USER[chat_id] = {"lang": "en", "market": "forex"}
+            USER[chat_id] = {"market": "forex"}
 
         if text == "/start":
 
@@ -198,22 +197,17 @@ def webhook():
         msg_id = cb["message"]["message_id"]
         action = cb["data"]
 
-        USER.setdefault(chat_id, {"lang": "en", "market": "forex"})
+        USER.setdefault(chat_id, {"market": "forex"})
 
-        # MARKET
         if action in ["forex", "crypto", "gold"]:
             USER[chat_id]["market"] = action
             edit(chat_id, msg_id, "📡 MARKET SELECTED", home_kb())
 
         elif action == "market":
-            edit(chat_id, msg_id, "📊 CHOOSE MARKET", market_kb())
+            edit(chat_id, msg_id, "📊 SELECT MARKET", market_kb())
 
         elif action == "lang":
             edit(chat_id, msg_id, "🌐 LANGUAGE", lang_kb())
-
-        elif action in ["en", "fr"]:
-            USER[chat_id]["lang"] = action
-            edit(chat_id, msg_id, "🏦 HOME", home_kb())
 
         elif action == "scan":
 
@@ -233,7 +227,7 @@ def webhook():
     return "ok"
 
 # =========================
-# RUN
+# RUN (RENDER FIX)
 # =========================
 if __name__ == "__main__":
 
