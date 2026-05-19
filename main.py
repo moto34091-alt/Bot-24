@@ -45,7 +45,7 @@ PAIRS = {
 }
 
 # =====================================================
-# TELEGRAM
+# TELEGRAM FUNCTIONS
 # =====================================================
 
 def typing(chat_id):
@@ -88,13 +88,17 @@ def edit(chat_id, msg_id, text, keyboard=None):
     requests.post(url, json=data)
 
 # =====================================================
-# ROUTES
+# HOME ROUTE
 # =====================================================
 
 @app.route("/")
 def home():
 
     return "🏦 HEDGE FUND BOT RUNNING"
+
+# =====================================================
+# DASHBOARD
+# =====================================================
 
 @app.route("/dashboard")
 def dashboard():
@@ -115,7 +119,7 @@ def dashboard():
         color:white;
         font-family:Arial;
         text-align:center;
-        padding-top:40px;
+        padding-top:30px;
     ">
 
         <h1>🏦 HEDGE FUND DASHBOARD</h1>
@@ -140,11 +144,117 @@ def dashboard():
 
         <hr style="width:60%;border:1px solid #333;">
 
-        <h2>🌐 BOT URL</h2>
+        <h2>🌐 QUICK ACCESS</h2>
 
-        <p>
-            https://bot-24-x8en.onrender.com
-        </p>
+        <br>
+
+        <a href="https://bot-24-x8en.onrender.com"
+           target="_blank">
+
+            <button style="
+                width:260px;
+                height:55px;
+                border:none;
+                border-radius:12px;
+                background:#2962ff;
+                color:white;
+                font-size:18px;
+                cursor:pointer;
+                margin:10px;
+            ">
+                🌐 OPEN WEBSITE
+            </button>
+
+        </a>
+
+        <br>
+
+        <a href="https://t.me/Force190_bot"
+           target="_blank">
+
+            <button style="
+                width:260px;
+                height:55px;
+                border:none;
+                border-radius:12px;
+                background:#00c853;
+                color:white;
+                font-size:18px;
+                cursor:pointer;
+                margin:10px;
+            ">
+                🤖 OPEN TELEGRAM BOT
+            </button>
+
+        </a>
+
+        <br>
+
+        <a href="/dashboard">
+
+            <button style="
+                width:260px;
+                height:55px;
+                border:none;
+                border-radius:12px;
+                background:#ff6d00;
+                color:white;
+                font-size:18px;
+                cursor:pointer;
+                margin:10px;
+            ">
+                🔄 REFRESH DASHBOARD
+            </button>
+
+        </a>
+
+        <hr style="width:60%;border:1px solid #333;">
+
+        <h2>📈 LIVE MARKET SIGNAL</h2>
+
+        <div style="
+            width:320px;
+            margin:auto;
+            background:#161616;
+            padding:20px;
+            border-radius:15px;
+            box-shadow:0 0 15px rgba(0,255,120,0.2);
+        ">
+
+            <h3>💱 EUR/USD</h3>
+
+            <p style="
+                color:#00e676;
+                font-size:22px;
+                font-weight:bold;
+            ">
+                🟢 BUY SIGNAL
+            </p>
+
+            <p>
+                🧠 Probability : 89%
+            </p>
+
+            <p>
+                ⚡ Trend : BULLISH
+            </p>
+
+            <p>
+                📊 Market Rate : HIGH
+            </p>
+
+        </div>
+
+        <br><br>
+
+        <div style="
+            color:#888;
+            font-size:14px;
+        ">
+            Powered by HEDGE FUND AI ENGINE
+        </div>
+
+        <br><br>
 
     </body>
 
@@ -332,7 +442,7 @@ def language_menu():
     return "🌐 Select Language", keyboard
 
 # =====================================================
-# SIGNAL ENGINE
+# MARKET DATA
 # =====================================================
 
 def get_price(symbol):
@@ -347,7 +457,6 @@ def get_price(symbol):
         r = requests.get(url).json()
 
         price = float(r.get("price", 0))
-
         change = float(r.get("change", 0))
 
         return price, change
@@ -355,6 +464,10 @@ def get_price(symbol):
     except:
 
         return 0, 0
+
+# =====================================================
+# ANALYZE SIGNAL
+# =====================================================
 
 def analyze(symbol):
 
@@ -370,11 +483,17 @@ def analyze(symbol):
     market_rate = abs(change)
 
     return {
+
         "symbol": symbol,
+
         "direction": direction,
+
         "prob": probability,
+
         "price": price,
+
         "change": change,
+
         "rate": market_rate
     }
 
@@ -484,9 +603,9 @@ def webhook():
                 "market": "forex"
             }
 
-        # =============================================
+        # =================================================
         # SMART START
-        # =============================================
+        # =================================================
 
         if (
             text.startswith("/start")
@@ -524,9 +643,9 @@ def webhook():
             "market": "forex"
         })
 
-        # =========================
+        # =================================================
         # HOME
-        # =========================
+        # =================================================
 
         if action == "home":
 
@@ -538,9 +657,9 @@ def webhook():
 
             edit(chat_id, msg_id, title, kb)
 
-        # =========================
-        # MARKET
-        # =========================
+        # =================================================
+        # MARKET MENU
+        # =================================================
 
         elif action == "market":
 
@@ -552,9 +671,9 @@ def webhook():
 
             edit(chat_id, msg_id, title, kb)
 
-        # =========================
-        # LANGUAGE
-        # =========================
+        # =================================================
+        # LANGUAGE MENU
+        # =================================================
 
         elif action == "language":
 
@@ -564,13 +683,11 @@ def webhook():
 
             edit(chat_id, msg_id, title, kb)
 
-        # =========================
+        # =================================================
         # CHANGE LANGUAGE
-        # =========================
+        # =================================================
 
         elif action == "lang_en":
-
-            typing(chat_id)
 
             USER[chat_id]["lang"] = "en"
 
@@ -580,21 +697,17 @@ def webhook():
 
         elif action == "lang_fr":
 
-            typing(chat_id)
-
             USER[chat_id]["lang"] = "fr"
 
             title, kb = app_menu("fr")
 
             edit(chat_id, msg_id, title, kb)
 
-        # =========================
+        # =================================================
         # MARKET SELECT
-        # =========================
+        # =================================================
 
         elif action in ["forex", "crypto", "gold"]:
-
-            typing(chat_id)
 
             USER[chat_id]["market"] = action
 
@@ -609,9 +722,9 @@ def webhook():
                 kb
             )
 
-        # =========================
+        # =================================================
         # SIGNALS
-        # =========================
+        # =================================================
 
         elif action == "signals":
 
@@ -637,36 +750,27 @@ def webhook():
 
             if not found:
 
-                send(
-                    chat_id,
-                    "❌ No strong signal found"
-                )
+                send(chat_id, "❌ No strong signal found")
 
-        # =========================
+        # =================================================
         # AUTO SIGNAL
-        # =========================
+        # =================================================
 
         elif action == "auto":
 
-            typing(chat_id)
-
-            market = USER[chat_id]["market"]
-
-            AUTO_USERS[chat_id] = market
+            AUTO_USERS[chat_id] = USER[chat_id]["market"]
 
             send(
                 chat_id,
                 f"🤖 AUTO SIGNAL ACTIVATED\n\n"
-                f"📊 MARKET : {market.upper()}"
+                f"📊 MARKET : {USER[chat_id]['market'].upper()}"
             )
 
-        # =========================
+        # =================================================
         # SETTINGS
-        # =========================
+        # =================================================
 
         elif action == "settings":
-
-            typing(chat_id)
 
             send(
                 chat_id,
@@ -691,4 +795,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port
-            )
+          )
