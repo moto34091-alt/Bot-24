@@ -6,16 +6,13 @@ from threading import Thread
 
 app = Flask(__name__)
 
-# ==================================================
-# CONFIGURATION
-# ==================================================
+# =====================================================
+# CONFIG
+# =====================================================
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
-
-# TON CHAT ID TELEGRAM
 CHAT_ID = os.getenv("CHAT_ID")
 
-# PAIRS FOREX
 PAIRS = [
     "EUR/USD",
     "GBP/USD",
@@ -23,15 +20,16 @@ PAIRS = [
     "AUD/USD"
 ]
 
-# TIMEFRAME
 INTERVAL = "15min"
 
-# ANTI SPAM
+# =====================================================
+# ANTI DUPLICATE SIGNALS
+# =====================================================
 last_signals = {}
 
-# ==================================================
+# =====================================================
 # TELEGRAM MESSAGE
-# ==================================================
+# =====================================================
 def send_message(text):
 
     try:
@@ -48,24 +46,24 @@ def send_message(text):
     except Exception as e:
         print(e)
 
-# ==================================================
+# =====================================================
 # EMA
-# ==================================================
-def calculate_ema(prices, period):
+# =====================================================
+def ema(prices, period):
 
     multiplier = 2 / (period + 1)
 
-    ema = prices[0]
+    value = prices[0]
 
     for price in prices[1:]:
-        ema = ((price - ema) * multiplier) + ema
+        value = ((price - value) * multiplier) + value
 
-    return ema
+    return value
 
-# ==================================================
+# =====================================================
 # RSI
-# ==================================================
-def calculate_rsi(closes, period=14):
+# =====================================================
+def rsi(closes, period=14):
 
     gains = []
     losses = []
@@ -89,9 +87,9 @@ def calculate_rsi(closes, period=14):
 
     return 100 - (100 / (1 + rs))
 
-# ==================================================
-# MARKET ANALYSIS
-# ==================================================
+# =====================================================
+# MARKET ANALYSIS SNIPER
+# =====================================================
 def analyze_pair(symbol):
 
     try:
@@ -100,7 +98,7 @@ def analyze_pair(symbol):
             f"https://api.twelvedata.com/time_series?"
             f"symbol={symbol}"
             f"&interval={INTERVAL}"
-            f"&outputsize=50"
+            f"&outputsize=60"
             f"&apikey={API_KEY}"
         )
 
@@ -113,7 +111,6 @@ def analyze_pair(symbol):
 
         closes = [float(c["close"]) for c in candles]
 
-        # CURRENT CANDLE
         current = candles[-1]
         previous = candles[-2]
 
@@ -124,60 +121,64 @@ def analyze_pair(symbol):
 
         prev_close = float(previous["close"])
 
-        # ==================================================
-        # INDICATORS
-        # ==================================================
-        ema10 = calculate_ema(closes[-10:], 10)
-        ema20 = calculate_ema(closes[-20:], 20)
+        # =====================================================
+        # EMA
+        # =====================================================
+        ema10 = ema(closes[-10:], 10)
+        ema20 = ema(closes[-20:], 20)
+        ema50 = ema(closes[-50:], 50)
 
-        rsi = calculate_rsi(closes[-15:], 14)
+        # =====================================================
+        # RSI
+        # =====================================================
+        current_rsi = rsi(closes[-15:], 14)
 
-        # ==================================================
+        # =====================================================
         # TREND
-        # ==================================================
-        trend_up = ema10 > ema20
-        trend_down = ema10 < ema20
+        # =====================================================
+        trend_up = ema10 > ema20 > ema50
+        trend_down = ema10 < ema20 < ema50
 
-        # ==================================================
-        # CANDLE POWER
-        # ==================================================
+        # =====================================================
+        # CANDLE STRENGTH
+        # =====================================================
         body = abs(close - open_)
         candle_range = high - low
 
         bullish = close > open_
         bearish = close < open_
 
-        strong_body = body > candle_range * 0.4
+        strong_body = body > candle_range * 0.45
 
-        # ==================================================
-        # VOLATILITY
-        # ==================================================
-        volatility_ok = candle_range > close * 0.0005
-
-        # ==================================================
+        # =====================================================
         # MOMENTUM
-        # ==================================================
+        # =====================================================
         momentum_up = close > prev_close
         momentum_down = close < prev_close
 
-        # ==================================================
-        # SIGNAL SCORE
-        # ==================================================
+        # =====================================================
+        # VOLATILITY
+        # =====================================================
+        volatility_ok = candle_range > close * 0.0006
+
+        # =====================================================
+        # SNIPER SCORE
+        # =====================================================
         call_score = 0
         put_score = 0
 
         # TREND
         if trend_up:
-            call_score += 1
+            call_score += 2
 
         if trend_down:
-            put_score += 1
+            put_score += 2
 
         # RSI
-        if rsi > 52:
+        if current_rsi > 55:
             call_score += 1
 
-        if rsi < 48:
+        if current_rsi < 45:
             put_score += 1
 
         # MOMENTUM
@@ -199,29 +200,29 @@ def analyze_pair(symbol):
             call_score += 1
             put_score += 1
 
-        # ==================================================
+        # =====================================================
         # FINAL SIGNALS
-        # ==================================================
-        if call_score >= 4:
+        # =====================================================
+        if call_score >= 5:
 
             return (
-                f"📈 CALL SIGNAL\n\n"
+                f"🔥 SNIPER CALL\n\n"
                 f"💱 Pair: {symbol}\n"
-                f"📊 Trend: UP\n"
-                f"📈 RSI: {round(rsi, 2)}\n"
-                f"🔥 Score: {call_score}/5\n"
-                f"⏰ Timeframe: 15min"
+                f"📈 Trend: STRONG UP\n"
+                f"📊 RSI: {round(current_rsi, 2)}\n"
+                f"🔥 Score: {call_score}/6\n"
+                f"⏰ TF: 15MIN"
             )
 
-        if put_score >= 4:
+        if put_score >= 5:
 
             return (
-                f"📉 PUT SIGNAL\n\n"
+                f"⚡ SNIPER PUT\n\n"
                 f"💱 Pair: {symbol}\n"
-                f"📊 Trend: DOWN\n"
-                f"📈 RSI: {round(rsi, 2)}\n"
-                f"🔥 Score: {put_score}/5\n"
-                f"⏰ Timeframe: 15min"
+                f"📉 Trend: STRONG DOWN\n"
+                f"📊 RSI: {round(current_rsi, 2)}\n"
+                f"🔥 Score: {put_score}/6\n"
+                f"⏰ TF: 15MIN"
             )
 
         return None
@@ -230,9 +231,9 @@ def analyze_pair(symbol):
 
         return f"ERROR: {str(e)}"
 
-# ==================================================
+# =====================================================
 # MARKET SCANNER
-# ==================================================
+# =====================================================
 def scan_market():
 
     signals = []
@@ -247,9 +248,9 @@ def scan_market():
 
     return signals
 
-# ==================================================
-# AUTO SIGNAL LOOP
-# ==================================================
+# =====================================================
+# AUTO LIVE SIGNALS
+# =====================================================
 def auto_signals():
 
     while True:
@@ -260,7 +261,6 @@ def auto_signals():
 
             for signal in signals:
 
-                # ANTI DUPLICATE
                 if signal not in last_signals:
 
                     send_message(signal)
@@ -284,28 +284,28 @@ def auto_signals():
 
             send_message(f"BOT ERROR:\n{str(e)}")
 
-        # CHECK EVERY 5 MIN
+        # CHECK EVERY 5 MINUTES
         time.sleep(300)
 
-# ==================================================
+# =====================================================
 # HOME
-# ==================================================
+# =====================================================
 @app.route("/")
 def home():
 
-    return "BOT 15MIN ONLINE"
+    return "SNIPER BOT 15MIN ONLINE"
 
-# ==================================================
+# =====================================================
 # STATUS
-# ==================================================
+# =====================================================
 @app.route("/status")
 def status():
 
-    return "BOT STATUS ACTIVE"
+    return "SNIPER STATUS ACTIVE"
 
-# ==================================================
+# =====================================================
 # SIGNAL ROUTE
-# ==================================================
+# =====================================================
 @app.route("/signal")
 def signal():
 
@@ -316,9 +316,9 @@ def signal():
 
     return "NO SIGNAL"
 
-# ==================================================
+# =====================================================
 # TELEGRAM WEBHOOK
-# ==================================================
+# =====================================================
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
@@ -326,15 +326,13 @@ def webhook():
 
     if "message" in data:
 
-        chat_id = data["message"]["chat"]["id"]
-
         text = data["message"].get("text", "")
 
         # START
         if text == "/start":
 
             send_message(
-                "🤖 BOT 15MIN ACTIVÉ\n\n"
+                "🤖 SNIPER BOT 15MIN ACTIVÉ\n\n"
                 "Commandes:\n"
                 "/signal - Voir signaux\n"
                 "/status - Vérifier bot"
@@ -343,29 +341,26 @@ def webhook():
         # STATUS
         elif text == "/status":
 
-            send_message("✅ BOT ONLINE")
+            send_message("✅ SNIPER BOT ONLINE")
 
-        # SIGNALS
+        # SIGNAL
         elif text == "/signal":
 
             signals = scan_market()
 
             if signals:
-
                 send_message("\n\n".join(signals))
-
             else:
-
                 send_message("NO SIGNAL")
 
     return "ok"
 
-# ==================================================
+# =====================================================
 # START BOT
-# ==================================================
+# =====================================================
 if __name__ == "__main__":
 
-    # AUTO TELEGRAM SIGNALS
+    # AUTO SIGNAL THREAD
     thread = Thread(target=auto_signals)
     thread.daemon = True
     thread.start()
@@ -376,4 +371,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=PORT
-        )
+    )
