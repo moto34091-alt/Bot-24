@@ -2,136 +2,351 @@ from flask import Flask, request
 import requests
 import os
 import time
+from threading import Thread
 
 app = Flask(__name__)
+
+# =====================================================
+# CONFIG
+# =====================================================
 
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
-# =========================
-# STATE
-# =========================
+# =====================================================
+# USER STATE
+# =====================================================
+
 USER = {}
 
+AUTO_USERS = {}
+
+# =====================================================
+# MARKETS
+# =====================================================
+
 PAIRS = {
-    "forex": ["EUR/USD", "GBP/USD", "USD/JPY"],
-    "crypto": ["BTC/USD", "ETH/USD"],
-    "gold": ["XAU/USD"]
+
+    "forex": [
+        "EUR/USD",
+        "GBP/USD",
+        "USD/JPY",
+        "AUD/USD"
+    ],
+
+    "crypto": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+    ],
+
+    "gold": [
+        "XAU/USD"
+    ]
 }
 
-# =========================
+# =====================================================
 # TELEGRAM
-# =========================
+# =====================================================
+
 def send(chat_id, text, keyboard=None):
+
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    data = {"chat_id": chat_id, "text": text}
+
+    data = {
+        "chat_id": chat_id,
+        "text": text
+    }
+
     if keyboard:
         data["reply_markup"] = keyboard
+
     requests.post(url, json=data)
 
 def edit(chat_id, msg_id, text, keyboard=None):
+
     url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
+
     data = {
         "chat_id": chat_id,
         "message_id": msg_id,
         "text": text
     }
+
     if keyboard:
         data["reply_markup"] = keyboard
+
     requests.post(url, json=data)
 
-# =========================
-# HOME ROUTE
-# =========================
+# =====================================================
+# ROUTES
+# =====================================================
+
 @app.route("/")
 def home():
     return "🏦 HEDGE FUND BOT RUNNING"
 
-# =========================
-# DASHBOARD (FIXED)
-# =========================
 @app.route("/dashboard")
 def dashboard():
+
     return """
     <html>
-        <head>
-            <title>HEDGE FUND DASHBOARD</title>
-        </head>
-        <body style="background:#0d0d0d;color:white;font-family:Arial;text-align:center;padding-top:40px;">
 
-            <h1>🏦 DASHBOARD LIVE</h1>
-            <p>📡 Bot Render Active</p>
+    <head>
 
-            <hr style="width:50%;border:1px solid #333;">
+        <title>HEDGE FUND DASHBOARD</title>
 
-            <h3>📊 SYSTEM STATUS</h3>
-            <p>🧠 AI ENGINE: ACTIVE</p>
-            <p>📡 SIGNAL ENGINE: READY</p>
-            <p>💱 MARKETS: FOREX / CRYPTO / GOLD</p>
+        <meta http-equiv="refresh" content="10">
 
-            <hr style="width:50%;border:1px solid #333;">
+    </head>
 
-            <h3>⚡ HIGH PROB SYSTEM</h3>
-            <p>ONLY STRONG SIGNALS ARE SHOWN</p>
+    <body style="
+        background:#0d0d0d;
+        color:white;
+        font-family:Arial;
+        text-align:center;
+        padding-top:40px;
+    ">
 
-        </body>
+        <h1>🏦 HEDGE FUND DASHBOARD</h1>
+
+        <p>📡 LIVE SIGNAL SYSTEM ACTIVE</p>
+
+        <hr style="width:60%;border:1px solid #333;">
+
+        <h2>📊 SYSTEM STATUS</h2>
+
+        <p>🧠 AI ENGINE : ACTIVE</p>
+
+        <p>📡 SIGNAL ENGINE : READY</p>
+
+        <p>💱 FOREX / CRYPTO / GOLD</p>
+
+        <hr style="width:60%;border:1px solid #333;">
+
+        <h2>⚡ HIGH PROBABILITY MODE</h2>
+
+        <p>ONLY STRONG SIGNALS</p>
+
+        <hr style="width:60%;border:1px solid #333;">
+
+        <h2>🌐 BOT URL</h2>
+
+        <p>
+            https://bot-24-x8en.onrender.com
+        </p>
+
+    </body>
+
     </html>
     """
 
-# =========================
-# KEYBOARDS
-# =========================
-def home_kb():
-    return {
-        "inline_keyboard": [
-            [{"text": "📊 MARKET", "callback_data": "market"}],
-            [{"text": "📡 SIGNALS", "callback_data": "scan"}],
-            [{"text": "🌐 LANGUAGE", "callback_data": "lang"}],
-            [{
-                "text": "🌐 DASHBOARD",
-                "url": "https://bot-24-x8en.onrender.com/dashboard"
-            }]
-        ]
+# =====================================================
+# APP MENU
+# =====================================================
+
+def app_menu(lang="en"):
+
+    texts = {
+
+        "en": {
+
+            "title":
+            "🏦 HEDGE FUND AI BOT\n\n"
+            "📊 Smart Trading Application\n"
+            "🧠 Institutional AI Engine\n"
+            "📡 HIGH PROBABILITY SIGNALS",
+
+            "market": "📊 Markets",
+
+            "signals": "📡 Live Signals",
+
+            "auto": "🤖 Auto Signal",
+
+            "dashboard": "🌐 Dashboard",
+
+            "language": "🌐 Language",
+
+            "settings": "⚙ Settings"
+        },
+
+        "fr": {
+
+            "title":
+            "🏦 HEDGE FUND AI BOT\n\n"
+            "📊 Application Trading Intelligente\n"
+            "🧠 Intelligence Institutionnelle\n"
+            "📡 Signaux Haute Probabilité",
+
+            "market": "📊 Marchés",
+
+            "signals": "📡 Signaux",
+
+            "auto": "🤖 Auto Signal",
+
+            "dashboard": "🌐 Dashboard",
+
+            "language": "🌐 Langue",
+
+            "settings": "⚙ Paramètres"
+        }
     }
 
-def market_kb():
-    return {
+    t = texts.get(lang, texts["en"])
+
+    keyboard = {
+
         "inline_keyboard": [
+
             [
-                {"text": "💱 Forex", "callback_data": "forex"},
-                {"text": "🪙 Crypto", "callback_data": "crypto"}
+                {
+                    "text": t["market"],
+                    "callback_data": "market"
+                },
+
+                {
+                    "text": t["signals"],
+                    "callback_data": "signals"
+                }
             ],
-            [{"text": "🥇 Gold", "callback_data": "gold"}]
-        ]
-    }
 
-def lang_kb():
-    return {
-        "inline_keyboard": [
             [
-                {"text": "🇬🇧 English", "callback_data": "en"},
-                {"text": "🇫🇷 Français", "callback_data": "fr"}
+                {
+                    "text": t["auto"],
+                    "callback_data": "auto"
+                }
+            ],
+
+            [
+                {
+                    "text": t["dashboard"],
+                    "url":
+                    "https://bot-24-x8en.onrender.com/dashboard"
+                }
+            ],
+
+            [
+                {
+                    "text": t["language"],
+                    "callback_data": "language"
+                },
+
+                {
+                    "text": t["settings"],
+                    "callback_data": "settings"
+                }
             ]
         ]
     }
 
-# =========================
-# PRICE API
-# =========================
-def get_price(symbol):
-    try:
-        r = requests.get(
-            f"https://api.twelvedata.com/quote?symbol={symbol}&apikey={API_KEY}"
-        ).json()
+    return t["title"], keyboard
 
-        return float(r.get("price", 0)), float(r.get("change", 0))
+# =====================================================
+# MARKET MENU
+# =====================================================
+
+def market_menu(lang="en"):
+
+    text = {
+
+        "en": "📊 Select Market",
+
+        "fr": "📊 Choisir Marché"
+    }
+
+    keyboard = {
+
+        "inline_keyboard": [
+
+            [
+                {
+                    "text": "💱 FOREX",
+                    "callback_data": "forex"
+                },
+
+                {
+                    "text": "🪙 CRYPTO",
+                    "callback_data": "crypto"
+                }
+            ],
+
+            [
+                {
+                    "text": "🥇 GOLD",
+                    "callback_data": "gold"
+                }
+            ],
+
+            [
+                {
+                    "text": "⬅ Back",
+                    "callback_data": "home"
+                }
+            ]
+        ]
+    }
+
+    return text.get(lang, text["en"]), keyboard
+
+# =====================================================
+# LANGUAGE MENU
+# =====================================================
+
+def language_menu():
+
+    keyboard = {
+
+        "inline_keyboard": [
+
+            [
+                {
+                    "text": "🇬🇧 English",
+                    "callback_data": "lang_en"
+                },
+
+                {
+                    "text": "🇫🇷 Français",
+                    "callback_data": "lang_fr"
+                }
+            ],
+
+            [
+                {
+                    "text": "⬅ Back",
+                    "callback_data": "home"
+                }
+            ]
+        ]
+    }
+
+    return "🌐 Select Language", keyboard
+
+# =====================================================
+# SIGNAL ENGINE
+# =====================================================
+
+def get_price(symbol):
+
+    try:
+
+        url = (
+            f"https://api.twelvedata.com/quote?"
+            f"symbol={symbol}&apikey={API_KEY}"
+        )
+
+        r = requests.get(url).json()
+
+        price = float(r.get("price", 0))
+
+        change = float(r.get("change", 0))
+
+        return price, change
+
     except:
+
         return 0, 0
 
-# =========================
-# SIGNAL ENGINE
-# =========================
-def signal(symbol):
+def analyze(symbol):
 
     price, change = get_price(symbol)
 
@@ -139,97 +354,300 @@ def signal(symbol):
         return None
 
     direction = "BUY" if change > 0 else "SELL"
-    prob = 85 if abs(change) > 0.4 else 70
 
-    return direction, prob, price, change
+    probability = 90 if abs(change) > 0.5 else 75
 
-# =========================
-# FORMAT SIGNAL
-# =========================
-def format_signal(symbol, direction, prob, price, change):
+    market_rate = abs(change)
 
-    emoji = "🟢" if direction == "BUY" else "🔴"
-    trend = "📈 UP" if change > 0 else "📉 DOWN"
+    return {
+        "symbol": symbol,
+        "direction": direction,
+        "prob": probability,
+        "price": price,
+        "change": change,
+        "rate": market_rate
+    }
+
+# =====================================================
+# SIGNAL FORMAT
+# =====================================================
+
+def signal_card(data):
+
+    emoji = "🟢" if data["direction"] == "BUY" else "🔴"
+
+    trend = "📈 BULLISH" if data["change"] > 0 else "📉 BEARISH"
+
+    strength = "█" * int(data["prob"] / 10)
 
     return (
+
         "━━━━━━━━━━━━━━━━━━\n"
         "📡 HIGH PROB SIGNAL\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"{emoji} {direction}\n"
-        f"💱 {symbol}\n\n"
-        f"💰 PRICE: {price}\n"
-        f"📊 CHANGE: {change}\n"
-        f"📡 TREND: {trend}\n\n"
-        f"🧠 PROBABILITY: {prob}%\n"
+
+        f"{emoji} {data['direction']}\n\n"
+
+        f"💱 PAIR\n"
+        f"{data['symbol']}\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+
+        f"💰 PRICE : {data['price']}\n"
+
+        f"📊 MARKET RATE : {round(data['rate'],2)}\n"
+
+        f"{trend}\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+
+        f"🧠 AI PROBABILITY\n"
+        f"{data['prob']}%\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n"
+
+        f"⚡ STRENGTH\n"
+        f"{strength}\n\n"
+
         "━━━━━━━━━━━━━━━━━━"
     )
 
-# =========================
+# =====================================================
+# AUTO SIGNAL LOOP
+# =====================================================
+
+def auto_loop():
+
+    while True:
+
+        try:
+
+            for chat_id, market in AUTO_USERS.items():
+
+                pairs = PAIRS.get(market, [])
+
+                for symbol in pairs:
+
+                    data = analyze(symbol)
+
+                    if data and data["prob"] >= 80:
+
+                        send(chat_id, signal_card(data))
+
+                        time.sleep(2)
+
+            time.sleep(120)
+
+        except Exception as e:
+
+            print(e)
+
+# =====================================================
 # WEBHOOK
-# =========================
+# =====================================================
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
     data = request.json
 
+    # =================================================
+    # MESSAGE
+    # =================================================
+
     if "message" in data:
 
-        chat_id = data["message"]["chat"]["id"]
-        text = data["message"].get("text", "")
+        msg = data["message"]
+
+        chat_id = msg["chat"]["id"]
+
+        text = msg.get("text", "").lower()
 
         if chat_id not in USER:
-            USER[chat_id] = {"market": "forex"}
 
-        if text == "/start":
+            USER[chat_id] = {
 
-            send(chat_id,
-                "🏦 HEDGE FUND AI BOT\n\n"
-                "📊 Forex / Crypto / Gold\n"
-                "🧠 Institutional AI Engine\n"
-                "📡 HIGH PROB ONLY SIGNALS",
-                home_kb()
-            )
+                "lang": "en",
+
+                "market": "forex"
+            }
+
+        if text in ["/start", "/star", "start"]:
+
+            lang = USER[chat_id]["lang"]
+
+            title, kb = app_menu(lang)
+
+            send(chat_id, title, kb)
+
+    # =================================================
+    # CALLBACK
+    # =================================================
 
     if "callback_query" in data:
 
         cb = data["callback_query"]
+
         chat_id = cb["message"]["chat"]["id"]
+
         msg_id = cb["message"]["message_id"]
+
         action = cb["data"]
 
-        USER.setdefault(chat_id, {"market": "forex"})
+        USER.setdefault(chat_id, {
 
-        if action in ["forex", "crypto", "gold"]:
-            USER[chat_id]["market"] = action
-            edit(chat_id, msg_id, "📡 MARKET SELECTED", home_kb())
+            "lang": "en",
+
+            "market": "forex"
+        })
+
+        # =========================
+        # HOME
+        # =========================
+
+        if action == "home":
+
+            lang = USER[chat_id]["lang"]
+
+            title, kb = app_menu(lang)
+
+            edit(chat_id, msg_id, title, kb)
+
+        # =========================
+        # MARKET
+        # =========================
 
         elif action == "market":
-            edit(chat_id, msg_id, "📊 SELECT MARKET", market_kb())
 
-        elif action == "lang":
-            edit(chat_id, msg_id, "🌐 LANGUAGE", lang_kb())
+            lang = USER[chat_id]["lang"]
 
-        elif action == "scan":
+            title, kb = market_menu(lang)
+
+            edit(chat_id, msg_id, title, kb)
+
+        # =========================
+        # LANGUAGE
+        # =========================
+
+        elif action == "language":
+
+            title, kb = language_menu()
+
+            edit(chat_id, msg_id, title, kb)
+
+        # =========================
+        # CHANGE LANG
+        # =========================
+
+        elif action == "lang_en":
+
+            USER[chat_id]["lang"] = "en"
+
+            title, kb = app_menu("en")
+
+            edit(chat_id, msg_id, title, kb)
+
+        elif action == "lang_fr":
+
+            USER[chat_id]["lang"] = "fr"
+
+            title, kb = app_menu("fr")
+
+            edit(chat_id, msg_id, title, kb)
+
+        # =========================
+        # SELECT MARKET
+        # =========================
+
+        elif action in ["forex", "crypto", "gold"]:
+
+            USER[chat_id]["market"] = action
+
+            lang = USER[chat_id]["lang"]
+
+            title, kb = app_menu(lang)
+
+            edit(
+                chat_id,
+                msg_id,
+                f"✅ MARKET SELECTED : {action.upper()}",
+                kb
+            )
+
+        # =========================
+        # SIGNALS
+        # =========================
+
+        elif action == "signals":
 
             market = USER[chat_id]["market"]
 
-            for symbol in PAIRS[market]:
+            pairs = PAIRS.get(market, [])
 
-                result = signal(symbol)
+            found = False
 
-                if result:
+            for symbol in pairs:
 
-                    d, p, price, change = result
+                data = analyze(symbol)
 
-                    send(chat_id, format_signal(symbol, d, p, price, change))
+                if data and data["prob"] >= 75:
+
+                    send(chat_id, signal_card(data))
+
+                    found = True
+
                     time.sleep(1)
+
+            if not found:
+
+                send(
+                    chat_id,
+                    "❌ No strong signal found"
+                )
+
+        # =========================
+        # AUTO SIGNAL
+        # =========================
+
+        elif action == "auto":
+
+            market = USER[chat_id]["market"]
+
+            AUTO_USERS[chat_id] = market
+
+            send(
+                chat_id,
+                f"🤖 AUTO SIGNAL ACTIVATED\n\n"
+                f"📊 MARKET : {market.upper()}"
+            )
+
+        # =========================
+        # SETTINGS
+        # =========================
+
+        elif action == "settings":
+
+            send(
+                chat_id,
+                "⚙ SETTINGS PANEL\n\n"
+                "🧠 AI MODE : ACTIVE\n"
+                "📡 SIGNAL FILTER : HIGH PROBABILITY\n"
+                "⚡ AUTO REFRESH : ON"
+            )
 
     return "ok"
 
-# =========================
-# RUN (RENDER FIX)
-# =========================
+# =====================================================
+# RUN
+# =====================================================
+
 if __name__ == "__main__":
 
+    Thread(target=auto_loop, daemon=True).start()
+
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+        )
