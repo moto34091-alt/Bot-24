@@ -90,7 +90,7 @@ def home_kb():
             [{"text": "🌐 LANGUAGE", "callback_data": "lang"}],
             [{
                 "text": "🌐 DASHBOARD",
-                "url": "https://ton-app.onrender.com/dashboard"
+                "url": "https://bot-24-x8en.onrender.com"
             }]
         ]
     }
