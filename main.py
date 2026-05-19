@@ -88,7 +88,7 @@ def rsi(closes, period=14):
     return 100 - (100 / (1 + rs))
 
 # =====================================================
-# MARKET ANALYSIS SNIPER
+# ANALYSE SNIPER
 # =====================================================
 def analyze_pair(symbol):
 
@@ -140,7 +140,7 @@ def analyze_pair(symbol):
         trend_down = ema10 < ema20 < ema50
 
         # =====================================================
-        # CANDLE STRENGTH
+        # BOUGIE
         # =====================================================
         body = abs(close - open_)
         candle_range = high - low
@@ -162,7 +162,7 @@ def analyze_pair(symbol):
         volatility_ok = candle_range > close * 0.0006
 
         # =====================================================
-        # SNIPER SCORE
+        # SCORE
         # =====================================================
         call_score = 0
         put_score = 0
@@ -201,7 +201,7 @@ def analyze_pair(symbol):
             put_score += 1
 
         # =====================================================
-        # FINAL SIGNALS
+        # SIGNAL FINAL
         # =====================================================
         if call_score >= 5:
 
@@ -211,7 +211,7 @@ def analyze_pair(symbol):
                 f"📈 Trend: STRONG UP\n"
                 f"📊 RSI: {round(current_rsi, 2)}\n"
                 f"🔥 Score: {call_score}/6\n"
-                f"⏰ TF: 15MIN"
+                f"⏰ Timeframe: 15MIN"
             )
 
         if put_score >= 5:
@@ -222,7 +222,7 @@ def analyze_pair(symbol):
                 f"📉 Trend: STRONG DOWN\n"
                 f"📊 RSI: {round(current_rsi, 2)}\n"
                 f"🔥 Score: {put_score}/6\n"
-                f"⏰ TF: 15MIN"
+                f"⏰ Timeframe: 15MIN"
             )
 
         return None
@@ -232,7 +232,7 @@ def analyze_pair(symbol):
         return f"ERROR: {str(e)}"
 
 # =====================================================
-# MARKET SCANNER
+# SCAN MARKET
 # =====================================================
 def scan_market():
 
@@ -249,7 +249,7 @@ def scan_market():
     return signals
 
 # =====================================================
-# AUTO LIVE SIGNALS
+# AUTO SIGNALS
 # =====================================================
 def auto_signals():
 
@@ -296,6 +296,14 @@ def home():
     return "SNIPER BOT 15MIN ONLINE"
 
 # =====================================================
+# START PAGE
+# =====================================================
+@app.route("/start")
+def start_page():
+
+    return "SNIPER START OK"
+
+# =====================================================
 # STATUS
 # =====================================================
 @app.route("/status")
@@ -317,7 +325,7 @@ def signal():
     return "NO SIGNAL"
 
 # =====================================================
-# TELEGRAM WEBHOOK
+# WEBHOOK TELEGRAM
 # =====================================================
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -343,7 +351,7 @@ def webhook():
 
             send_message("✅ SNIPER BOT ONLINE")
 
-        # SIGNAL
+        # SIGNALS
         elif text == "/signal":
 
             signals = scan_market()
@@ -365,8 +373,8 @@ if __name__ == "__main__":
     thread.daemon = True
     thread.start()
 
-    # FLASK
-    PORT = int(os.environ.get("PORT", 5000"))
+    # FLASK SERVER
+    PORT = int(os.environ.get("PORT", 5000))
 
     app.run(
         host="0.0.0.0",
