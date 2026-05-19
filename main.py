@@ -21,9 +21,9 @@ PAIRS = {
     "gold": ["XAU/USD"]
 }
 
-TIMEFRAMES = {
-    "5min": "5min",
-    "15min": "15min",
+TF = {
+    "5m": "5min",
+    "15m": "15min",
     "1h": "1h"
 }
 
@@ -42,7 +42,7 @@ def send(chat_id, text, keyboard=None):
     requests.post(url, json=data)
 
 # =========================
-# MARKET DATA
+# DATA
 # =========================
 def candles(symbol, tf):
 
@@ -55,9 +55,9 @@ def candles(symbol, tf):
     return r["values"][::-1]
 
 # =========================
-# AI ENGINE (PRO)
+# AI ENGINE (INSTITUTIONAL SCORE)
 # =========================
-def analyze(data):
+def score(data):
 
     closes = [float(c["close"]) for c in data]
 
@@ -72,112 +72,93 @@ def analyze(data):
     ema20 = sum(closes[-20:]) / 20
     ema50 = sum(closes[-50:]) / 50
 
-    bullish = ema5 > ema20 > ema50
-    bearish = ema5 < ema20 < ema50
+    trend_up = ema5 > ema20 > ema50
+    trend_down = ema5 < ema20 < ema50
 
     momentum_up = close1 > close2 > close3
     momentum_down = close1 < close2 < close3
 
     body = abs(close1 - open1)
 
-    strong = body > (close1 * 0.002)
+    strong_candle = body > (close1 * 0.002)
 
-    return bullish, bearish, momentum_up, momentum_down, strong
+    score = 0
+
+    if trend_up:
+        score += 35
+    if trend_down:
+        score -= 35
+
+    if momentum_up:
+        score += 25
+    if momentum_down:
+        score -= 25
+
+    if strong_candle:
+        score += 10
+
+    if close1 > open1:
+        score += 10
+    else:
+        score -= 10
+
+    return score
 
 # =========================
-# SIGNAL ENGINE (IA + FILTER)
+# MULTI TF SIGNAL ENGINE
 # =========================
 def signal(symbol):
 
-    tf = {}
+    s5 = candles(symbol, TF["5m"])
+    s15 = candles(symbol, TF["15m"])
+    s1h = candles(symbol, TF["1h"])
 
-    for k in TIMEFRAMES:
-
-        data = candles(symbol, TIMEFRAMES[k])
-        if not data:
-            return None
-
-        tf[k] = analyze(data)
-
-    buy = 0
-    sell = 0
-
-    # WEIGHT SYSTEM
-    if tf["5min"][0]: buy += 1
-    if tf["5min"][1]: sell += 1
-
-    if tf["15min"][0]: buy += 2
-    if tf["15min"][1]: sell += 2
-
-    if tf["1h"][0]: buy += 3
-    if tf["1h"][1]: sell += 3
-
-    if tf["5min"][2]: buy += 1
-    if tf["5min"][3]: sell += 1
-
-    if tf["5min"][4]:
-        buy += 1
-        sell += 1
-
-    # ANTI FAKE SIGNAL
-    if abs(buy - sell) < 2:
+    if not s5 or not s15 or not s1h:
         return None
 
-    total = buy + sell
-    if total == 0:
-        return None
+    sc5 = score(s5)
+    sc15 = score(s15)
+    sc1h = score(s1h)
 
-    buy_p = int((buy / total) * 100)
-    sell_p = int((sell / total) * 100)
+    total = (sc5 * 1) + (sc15 * 2) + (sc1h * 3)
+
+    prob = min(98, abs(total))
 
     direction = None
-    prob = 0
 
-    if buy >= 7 and buy_p >= 70 and tf["1h"][0]:
+    if total >= 90 and sc1h > 0:
         direction = "BUY"
-        prob = buy_p
 
-    elif sell >= 7 and sell_p >= 70 and tf["1h"][1]:
+    elif total <= -90 and sc1h < 0:
         direction = "SELL"
-        prob = sell_p
 
     else:
         return None
 
-    return direction, prob, tf, buy, sell
+    return direction, prob
 
 # =========================
 # FORMAT SIGNAL
 # =========================
-def format(symbol, direction, prob, tf, buy, sell):
+def format_signal(symbol, direction, prob):
 
     emoji = "🟢" if direction == "BUY" else "🔴"
 
     bar = "█" * int(prob / 10) + "░" * (10 - int(prob / 10))
 
-    text = ""
-
-    for k, v in tf.items():
-        state = "🟢 Bullish" if v[0] else "🔴 Bearish" if v[1] else "⚪ Neutral"
-        text += f"{k.upper()} : {state}\n"
-
     return (
         "━━━━━━━━━━━━━━━━━━\n"
-        "📊 SNIPER AI PRO\n"
+        "🏦 HEDGE FUND AI ENGINE\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"{emoji} {direction}\n\n"
         f"💱 {symbol}\n\n"
+        f"🧠 PROBABILITY: {prob}%\n\n"
+        f"{bar}\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "MULTI TIMEFRAME\n\n"
-        f"{text}\n"
+        "📊 MULTI TIMEFRAME CONFIRMED\n"
+        "5m + 15m + 1h\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        f"PROBABILITY: {prob}%\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        f"BUY {buy} / SELL {sell}\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        f"{bar} {prob}%\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "HIGH PROB CONFIRMED\n"
+        "⚡ HIGH PROB ONLY SYSTEM\n"
         "━━━━━━━━━━━━━━━━━━"
     )
 
@@ -191,20 +172,18 @@ def api_signals():
 
     res = []
 
-    for p in PAIRS.get(market, []):
+    for p in PAIRS[market]:
 
         s = signal(p)
 
         if s:
 
-            d, pr, tf, b, se = s
+            d, pr = s
 
             item = {
                 "pair": p,
                 "direction": d,
-                "probability": pr,
-                "buy": b,
-                "sell": se
+                "probability": pr
             }
 
             HISTORY.append(item)
@@ -214,10 +193,11 @@ def api_signals():
     return jsonify(res)
 
 # =========================
-# HISTORY
+# HISTORY / WINRATE BASE
 # =========================
 @app.route("/api/history")
 def history():
+
     return jsonify(HISTORY[-100:])
 
 # =========================
@@ -225,35 +205,11 @@ def history():
 # =========================
 @app.route("/dashboard")
 def dashboard():
+
     return render_template("dashboard.html")
 
 # =========================
-# LOOP AUTO SIGNAL
-# =========================
-def loop():
-
-    while True:
-
-        for chat_id, u in USER.items():
-
-            market = u.get("market", "forex")
-
-            for p in PAIRS[market]:
-
-                s = signal(p)
-
-                if s:
-
-                    d, pr, tf, b, se = s
-
-                    send(chat_id, format(p, d, pr, tf, b, se))
-
-                time.sleep(2)
-
-        time.sleep(60)
-
-# =========================
-# WEBHOOK
+# TELEGRAM FLOW
 # =========================
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -271,13 +227,38 @@ def webhook():
         if text == "/start":
 
             send(chat_id,
-                "🤖 SNIPER AI PRO SYSTEM\n\n"
+                "🏦 HEDGE FUND AI BOT\n\n"
                 "📊 Forex / Crypto / Gold\n"
-                "🧠 AI Prediction Engine\n"
-                "📡 Live Signals Active"
+                "🧠 Institutional AI Engine\n"
+                "📡 HIGH PROB ONLY SIGNALS"
             )
 
     return "ok"
+
+# =========================
+# AUTO LOOP
+# =========================
+def loop():
+
+    while True:
+
+        for chat_id, u in USER.items():
+
+            market = u.get("market", "forex")
+
+            for p in PAIRS[market]:
+
+                s = signal(p)
+
+                if s:
+
+                    d, pr = s
+
+                    send(chat_id, format_signal(p, d, pr))
+
+                time.sleep(2)
+
+        time.sleep(60)
 
 # =========================
 # RUN
