@@ -10,7 +10,7 @@ TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
 # =========================
-# USER STATE SYSTEM
+# USER STATE
 # =========================
 USER = {}
 LAST_SIGNAL = {}
@@ -22,52 +22,24 @@ PAIRS = {
 }
 
 # =========================
-# TRANSLATION
-# =========================
-TEXT = {
-    "en": {
-        "home": "🏦 HEDGE FUND AI BOT",
-        "market": "📊 Select Market",
-        "signal": "📡 HIGH PROB SIGNAL"
-    },
-    "fr": {
-        "home": "🏦 HEDGE FUND AI BOT",
-        "market": "📊 Choisir Marché",
-        "signal": "📡 SIGNAL HAUTE PROBABILITÉ"
-    }
-}
-
-def t(chat_id, key):
-    lang = USER.get(chat_id, {}).get("lang", "en")
-    return TEXT.get(lang, TEXT["en"]).get(key, key)
-
-# =========================
 # TELEGRAM CORE
 # =========================
 def send(chat_id, text, keyboard=None):
-
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
     data = {"chat_id": chat_id, "text": text}
-
     if keyboard:
         data["reply_markup"] = keyboard
-
     requests.post(url, json=data)
 
 def edit(chat_id, msg_id, text, keyboard=None):
-
     url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
-
     data = {
         "chat_id": chat_id,
         "message_id": msg_id,
         "text": text
     }
-
     if keyboard:
         data["reply_markup"] = keyboard
-
     requests.post(url, json=data)
 
 # =========================
@@ -79,15 +51,20 @@ def home_kb():
             [{"text": "📊 MARKET", "callback_data": "market"}],
             [{"text": "📡 SIGNALS", "callback_data": "scan"}],
             [{"text": "🌐 LANGUAGE", "callback_data": "lang"}],
-            [{"text": "🌐 DASHBOARD", "url": "https://bot-24-bottoken.up.railway.app"}]
+            [{
+                "text": "🌐 DASHBOARD",
+                "url": "https://bot-24-bottoken.up.railway.app/dashboard"
+            }]
         ]
     }
 
 def market_kb():
     return {
         "inline_keyboard": [
-            [{"text": "💱 Forex", "callback_data": "forex"},
-             {"text": "🪙 Crypto", "callback_data": "crypto"}],
+            [
+                {"text": "💱 Forex", "callback_data": "forex"},
+                {"text": "🪙 Crypto", "callback_data": "crypto"}
+            ],
             [{"text": "🥇 Gold", "callback_data": "gold"}],
             [{"text": "⬅️ Home", "callback_data": "home"}]
         ]
@@ -96,8 +73,10 @@ def market_kb():
 def lang_kb():
     return {
         "inline_keyboard": [
-            [{"text": "🇬🇧 English", "callback_data": "en"},
-             {"text": "🇫🇷 Français", "callback_data": "fr"}]
+            [
+                {"text": "🇬🇧 English", "callback_data": "en"},
+                {"text": "🇫🇷 Français", "callback_data": "fr"}
+            ]
         ]
     }
 
@@ -105,7 +84,6 @@ def lang_kb():
 # MARKET DATA
 # =========================
 def market_data(symbol):
-
     try:
         r = requests.get(
             f"https://api.twelvedata.com/quote?symbol={symbol}&apikey={API_KEY}"
@@ -115,7 +93,6 @@ def market_data(symbol):
         change = float(r.get("change", 0))
 
         return price, change
-
     except:
         return 0, 0
 
@@ -144,7 +121,7 @@ def format_signal(symbol, direction, prob, price, change):
 
     return (
         "━━━━━━━━━━━━━━━━━━\n"
-        f"{t(0,'signal')}\n"
+        "📡 HIGH PROB SIGNAL\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"{emoji} {direction}\n"
         f"💱 {symbol}\n\n"
@@ -156,44 +133,30 @@ def format_signal(symbol, direction, prob, price, change):
     )
 
 # =========================
-# DASHBOARD (ADDED ONLY)
+# DASHBOARD (ADDED)
 # =========================
 @app.route("/dashboard")
 def dashboard():
-
-    html = """
+    return """
     <html>
-    <head>
-        <title>HEDGE FUND DASHBOARD</title>
-        <style>
-            body {background:#0d0d0d;color:white;font-family:Arial;text-align:center;}
-            .box {background:#1a1a1a;padding:20px;margin:10px;border-radius:10px;}
-            .title {color:#00ff99;font-size:22px;}
-        </style>
-    </head>
-    <body>
+        <head>
+            <title>HEDGE FUND DASHBOARD</title>
+        </head>
+        <body style="background:#0d0d0d;color:white;font-family:Arial;text-align:center;padding-top:50px;">
 
-        <div class="box">
-            <div class="title">🏦 HEDGE FUND AI DASHBOARD</div>
-            <p>📡 LIVE SYSTEM ACTIVE</p>
-        </div>
+            <h1>🏦 DASHBOARD OK</h1>
+            <p>📡 Bot Railway is working</p>
 
-        <div class="box">
-            <p>📊 MARKET ENGINE: ON</p>
-            <p>🧠 AI SIGNAL: ACTIVE</p>
-            <p>⚡ MODE: HIGH PROB ONLY</p>
-        </div>
+            <hr style="width:50%;border:1px solid #333;">
 
-        <div class="box">
-            <p>💱 Forex / Crypto / Gold</p>
-            <p>📈 Multi Market System</p>
-        </div>
+            <h3>📊 SYSTEM STATUS</h3>
+            <p>🧠 AI Engine: ACTIVE</p>
+            <p>📡 Signals: READY</p>
+            <p>💱 Market: FOREX / CRYPTO / GOLD</p>
 
-    </body>
+        </body>
     </html>
     """
-
-    return html
 
 # =========================
 # WEBHOOK
@@ -214,7 +177,10 @@ def webhook():
         if text == "/start":
 
             send(chat_id,
-                t(chat_id, "home"),
+                "🏦 HEDGE FUND AI BOT\n\n"
+                "📊 Forex / Crypto / Gold\n"
+                "🧠 Institutional AI Engine\n"
+                "📡 HIGH PROB ONLY SIGNALS",
                 home_kb()
             )
 
@@ -227,17 +193,17 @@ def webhook():
 
         USER.setdefault(chat_id, {"lang": "en", "market": "forex"})
 
-        # ================= HOME =================
+        # HOME
         if action == "home":
             edit(chat_id, msg_id,
-                t(chat_id, "home"),
+                "🏠 HOME",
                 home_kb()
             )
 
-        # ================= MARKET =================
+        # MARKET
         elif action == "market":
             edit(chat_id, msg_id,
-                t(chat_id, "market"),
+                "📊 SELECT MARKET",
                 market_kb()
             )
 
@@ -248,7 +214,7 @@ def webhook():
                 home_kb()
             )
 
-        # ================= LANGUAGE =================
+        # LANGUAGE
         elif action == "lang":
             edit(chat_id, msg_id,
                 "🌐 LANGUAGE",
@@ -258,11 +224,11 @@ def webhook():
         elif action in ["en", "fr"]:
             USER[chat_id]["lang"] = action
             edit(chat_id, msg_id,
-                t(chat_id, "home"),
+                "🏠 HOME",
                 home_kb()
             )
 
-        # ================= SCAN =================
+        # SCAN
         elif action == "scan":
 
             market = USER[chat_id]["market"]
