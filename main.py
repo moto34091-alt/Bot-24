@@ -13,7 +13,6 @@ API_KEY = os.getenv("TWELVE_API_KEY")
 # USER STATE
 # =========================
 USER = {}
-LAST_SIGNAL = {}
 
 PAIRS = {
     "forex": ["EUR/USD", "GBP/USD", "USD/JPY"],
@@ -43,7 +42,45 @@ def edit(chat_id, msg_id, text, keyboard=None):
     requests.post(url, json=data)
 
 # =========================
-# UI KEYBOARDS
+# HOME PAGE (IMPORTANT FIX)
+# =========================
+@app.route("/")
+def home():
+    return "🏦 HEDGE FUND BOT RUNNING"
+
+# =========================
+# DASHBOARD (FIXED)
+# =========================
+@app.route("/dashboard")
+def dashboard():
+    return """
+    <html>
+        <head>
+            <title>HEDGE FUND DASHBOARD</title>
+        </head>
+        <body style="background:#0d0d0d;color:white;font-family:Arial;text-align:center;padding-top:40px;">
+
+            <h1>🏦 DASHBOARD LIVE</h1>
+            <p>📡 Render Bot is Running</p>
+
+            <hr style="width:50%;border:1px solid #333;">
+
+            <h3>📊 SYSTEM STATUS</h3>
+            <p>🧠 AI ENGINE: ACTIVE</p>
+            <p>📡 SIGNAL ENGINE: READY</p>
+            <p>💱 MARKETS: FOREX / CRYPTO / GOLD</p>
+
+            <hr style="width:50%;border:1px solid #333;">
+
+            <h3>⚡ LIVE MODE</h3>
+            <p>HIGH PROB ONLY SIGNAL SYSTEM</p>
+
+        </body>
+    </html>
+    """
+
+# =========================
+# KEYBOARDS
 # =========================
 def home_kb():
     return {
@@ -53,7 +90,7 @@ def home_kb():
             [{"text": "🌐 LANGUAGE", "callback_data": "lang"}],
             [{
                 "text": "🌐 DASHBOARD",
-                "url": "https://bot-24-bottoken.up.railway.app/dashboard"
+                "url": "https://ton-app.onrender.com/dashboard"
             }]
         ]
     }
@@ -65,8 +102,7 @@ def market_kb():
                 {"text": "💱 Forex", "callback_data": "forex"},
                 {"text": "🪙 Crypto", "callback_data": "crypto"}
             ],
-            [{"text": "🥇 Gold", "callback_data": "gold"}],
-            [{"text": "⬅️ Home", "callback_data": "home"}]
+            [{"text": "🥇 Gold", "callback_data": "gold"}]
         ]
     }
 
@@ -83,31 +119,28 @@ def lang_kb():
 # =========================
 # MARKET DATA
 # =========================
-def market_data(symbol):
+def get_price(symbol):
     try:
         r = requests.get(
             f"https://api.twelvedata.com/quote?symbol={symbol}&apikey={API_KEY}"
         ).json()
 
-        price = float(r.get("price", 0))
-        change = float(r.get("change", 0))
-
-        return price, change
+        return float(r.get("price", 0)), float(r.get("change", 0))
     except:
         return 0, 0
 
 # =========================
-# SIGNAL ENGINE
+# SIGNAL ENGINE (SIMPLE)
 # =========================
 def signal(symbol):
 
-    price, change = market_data(symbol)
+    price, change = get_price(symbol)
 
     if price == 0:
         return None
 
-    direction = "BUY" if int(price * 10) % 2 == 0 else "SELL"
-    prob = 85 if direction == "BUY" else 78
+    direction = "BUY" if change > 0 else "SELL"
+    prob = 80 if abs(change) > 0.5 else 65
 
     return direction, prob, price, change
 
@@ -128,35 +161,9 @@ def format_signal(symbol, direction, prob, price, change):
         f"💰 PRICE: {price}\n"
         f"📊 CHANGE: {change}\n"
         f"📡 TREND: {trend}\n\n"
-        f"🧠 FORCE: {prob}%\n"
+        f"🧠 PROB: {prob}%\n"
         "━━━━━━━━━━━━━━━━━━"
     )
-
-# =========================
-# DASHBOARD (ADDED)
-# =========================
-@app.route("/dashboard")
-def dashboard():
-    return """
-    <html>
-        <head>
-            <title>HEDGE FUND DASHBOARD</title>
-        </head>
-        <body style="background:#0d0d0d;color:white;font-family:Arial;text-align:center;padding-top:50px;">
-
-            <h1>🏦 DASHBOARD OK</h1>
-            <p>📡 Bot Railway is working</p>
-
-            <hr style="width:50%;border:1px solid #333;">
-
-            <h3>📊 SYSTEM STATUS</h3>
-            <p>🧠 AI Engine: ACTIVE</p>
-            <p>📡 Signals: READY</p>
-            <p>💱 Market: FOREX / CRYPTO / GOLD</p>
-
-        </body>
-    </html>
-    """
 
 # =========================
 # WEBHOOK
@@ -193,42 +200,21 @@ def webhook():
 
         USER.setdefault(chat_id, {"lang": "en", "market": "forex"})
 
-        # HOME
-        if action == "home":
-            edit(chat_id, msg_id,
-                "🏠 HOME",
-                home_kb()
-            )
-
         # MARKET
-        elif action == "market":
-            edit(chat_id, msg_id,
-                "📊 SELECT MARKET",
-                market_kb()
-            )
-
-        elif action in ["forex", "crypto", "gold"]:
+        if action in ["forex", "crypto", "gold"]:
             USER[chat_id]["market"] = action
-            edit(chat_id, msg_id,
-                "📡 SIGNAL READY",
-                home_kb()
-            )
+            edit(chat_id, msg_id, "📡 MARKET SELECTED", home_kb())
 
-        # LANGUAGE
+        elif action == "market":
+            edit(chat_id, msg_id, "📊 CHOOSE MARKET", market_kb())
+
         elif action == "lang":
-            edit(chat_id, msg_id,
-                "🌐 LANGUAGE",
-                lang_kb()
-            )
+            edit(chat_id, msg_id, "🌐 LANGUAGE", lang_kb())
 
         elif action in ["en", "fr"]:
             USER[chat_id]["lang"] = action
-            edit(chat_id, msg_id,
-                "🏠 HOME",
-                home_kb()
-            )
+            edit(chat_id, msg_id, "🏦 HOME", home_kb())
 
-        # SCAN
         elif action == "scan":
 
             market = USER[chat_id]["market"]
@@ -241,18 +227,7 @@ def webhook():
 
                     d, p, price, change = result
 
-                    LAST_SIGNAL[chat_id] = {
-                        "symbol": symbol,
-                        "direction": d,
-                        "prob": p,
-                        "price": price,
-                        "change": change
-                    }
-
-                    send(chat_id,
-                        format_signal(symbol, d, p, price, change)
-                    )
-
+                    send(chat_id, format_signal(symbol, d, p, price, change))
                     time.sleep(1)
 
     return "ok"
@@ -261,7 +236,6 @@ def webhook():
 # RUN
 # =========================
 if __name__ == "__main__":
-    Thread(target=lambda: None, daemon=True).start()
 
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
