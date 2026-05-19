@@ -1,382 +1,311 @@
-from flask import Flask, request
-import os
-import requests
-import time
-from threading import Thread
+# =====================================================
+# MENU PRINCIPAL
+# =====================================================
+def main_menu():
 
-app = Flask(__name__)
+    return {
+        "inline_keyboard": [
+
+            [
+                {
+                    "text": "🚀 Exécuter",
+                    "callback_data": "execute"
+                }
+            ],
+
+            [
+                {
+                    "text": "🌐 Language settings",
+                    "callback_data": "language"
+                }
+            ],
+
+            [
+                {
+                    "text": "📡 Auto Signal ON",
+                    "callback_data": "auto_on"
+                },
+
+                {
+                    "text": "🛑 Auto Signal OFF",
+                    "callback_data": "auto_off"
+                }
+            ],
+
+            [
+                {
+                    "text": "👨‍💻 @Mr_dflam",
+                    "url": "https://t.me/Mr_dflam"
+                }
+            ],
+
+            [
+                {
+                    "text": "❓ Aide",
+                    "callback_data": "help"
+                }
+            ]
+        ]
+    }
 
 # =====================================================
-# CONFIG
+# MENU LANGUES
 # =====================================================
-TOKEN = os.getenv("TOKEN")
-API_KEY = os.getenv("TWELVE_API_KEY")
-CHAT_ID = os.getenv("CHAT_ID")
+def language_menu():
 
-PAIRS = [
-    "EUR/USD",
-    "GBP/USD",
-    "USD/JPY",
-    "AUD/USD"
-]
+    return {
+        "inline_keyboard": [
 
-INTERVAL = "15min"
+            [
+                {
+                    "text": "🇫🇷 Français",
+                    "callback_data": "lang_fr"
+                },
+
+                {
+                    "text": "🇬🇧 English",
+                    "callback_data": "lang_en"
+                }
+            ],
+
+            [
+                {
+                    "text": "🇵🇹 Português",
+                    "callback_data": "lang_pt"
+                },
+
+                {
+                    "text": "🇨🇩 Swahili",
+                    "callback_data": "lang_sw"
+                }
+            ],
+
+            [
+                {
+                    "text": "🇨🇩 Lingala",
+                    "callback_data": "lang_ln"
+                }
+            ]
+        ]
+    }
 
 # =====================================================
-# ANTI DUPLICATE SIGNALS
+# CHOIX MARCHÉ
 # =====================================================
-last_signals = {}
+def market_menu():
+
+    return {
+        "inline_keyboard": [
+
+            [
+                {
+                    "text": "💱 Forex",
+                    "callback_data": "market_forex"
+                },
+
+                {
+                    "text": "🪙 Crypto",
+                    "callback_data": "market_crypto"
+                }
+            ],
+
+            [
+                {
+                    "text": "🥇 Gold",
+                    "callback_data": "market_gold"
+                },
+
+                {
+                    "text": "📈 Indices",
+                    "callback_data": "market_indices"
+                }
+            ]
+        ]
+    }
 
 # =====================================================
-# TELEGRAM MESSAGE
+# FOREX MENU
 # =====================================================
-def send_message(text):
+def forex_menu():
 
-    try:
+    return {
+        "inline_keyboard": [
 
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+            [
+                {
+                    "text": "EUR/USD",
+                    "callback_data": "EUR/USD"
+                },
 
-        data = {
-            "chat_id": CHAT_ID,
-            "text": text
+                {
+                    "text": "GBP/USD",
+                    "callback_data": "GBP/USD"
+                }
+            ],
+
+            [
+                {
+                    "text": "USD/JPY",
+                    "callback_data": "USD/JPY"
+                },
+
+                {
+                    "text": "AUD/USD",
+                    "callback_data": "AUD/USD"
+                }
+            ]
+        ]
+    }
+
+# =====================================================
+# CRYPTO MENU
+# =====================================================
+def crypto_menu():
+
+    return {
+        "inline_keyboard": [
+
+            [
+                {
+                    "text": "BTC/USD",
+                    "callback_data": "BTC/USD"
+                },
+
+                {
+                    "text": "ETH/USD",
+                    "callback_data": "ETH/USD"
+                }
+            ],
+
+            [
+                {
+                    "text": "SOL/USD",
+                    "callback_data": "SOL/USD"
+                },
+
+                {
+                    "text": "XRP/USD",
+                    "callback_data": "XRP/USD"
+                }
+            ]
+        ]
+    }
+
+# =====================================================
+# START COMMAND
+# =====================================================
+if text == "/start":
+
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    data_send = {
+        "chat_id": chat_id,
+        "text":
+        "🤖 SNIPER BOT ACTIVÉ\n\n"
+        "💬: Select your language:",
+        "reply_markup": main_menu()
+    }
+
+    requests.post(url, json=data_send)
+
+# =====================================================
+# CALLBACK BUTTONS
+# =====================================================
+if "callback_query" in data:
+
+    callback = data["callback_query"]
+
+    chat_id = callback["message"]["chat"]["id"]
+
+    action = callback["data"]
+
+    # ==========================================
+    # LANGUAGE
+    # ==========================================
+    if action == "language":
+
+        send_menu = {
+            "chat_id": chat_id,
+            "text": "🌐 Language settings\n\n💬: Select your language:",
+            "reply_markup": language_menu()
         }
 
-        requests.post(url, data=data)
-
-    except Exception as e:
-        print(e)
-
-# =====================================================
-# EMA
-# =====================================================
-def ema(prices, period):
-
-    multiplier = 2 / (period + 1)
-
-    value = prices[0]
-
-    for price in prices[1:]:
-        value = ((price - value) * multiplier) + value
-
-    return value
-
-# =====================================================
-# RSI
-# =====================================================
-def rsi(closes, period=14):
-
-    gains = []
-    losses = []
-
-    for i in range(1, len(closes)):
-
-        diff = closes[i] - closes[i - 1]
-
-        if diff > 0:
-            gains.append(diff)
-        else:
-            losses.append(abs(diff))
-
-    avg_gain = sum(gains[-period:]) / period if gains else 0
-    avg_loss = sum(losses[-period:]) / period if losses else 0
-
-    if avg_loss == 0:
-        return 100
-
-    rs = avg_gain / avg_loss
-
-    return 100 - (100 / (1 + rs))
-
-# =====================================================
-# ANALYSE SNIPER
-# =====================================================
-def analyze_pair(symbol):
-
-    try:
-
-        url = (
-            f"https://api.twelvedata.com/time_series?"
-            f"symbol={symbol}"
-            f"&interval={INTERVAL}"
-            f"&outputsize=60"
-            f"&apikey={API_KEY}"
+        requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            json=send_menu
         )
 
-        response = requests.get(url).json()
-
-        if "values" not in response:
-            return None
-
-        candles = response["values"][::-1]
-
-        closes = [float(c["close"]) for c in candles]
-
-        current = candles[-1]
-        previous = candles[-2]
-
-        close = float(current["close"])
-        open_ = float(current["open"])
-        high = float(current["high"])
-        low = float(current["low"])
-
-        prev_close = float(previous["close"])
-
-        # =====================================================
-        # EMA
-        # =====================================================
-        ema10 = ema(closes[-10:], 10)
-        ema20 = ema(closes[-20:], 20)
-        ema50 = ema(closes[-50:], 50)
-
-        # =====================================================
-        # RSI
-        # =====================================================
-        current_rsi = rsi(closes[-15:], 14)
-
-        # =====================================================
-        # TREND
-        # =====================================================
-        trend_up = ema10 > ema20 > ema50
-        trend_down = ema10 < ema20 < ema50
-
-        # =====================================================
-        # BOUGIE
-        # =====================================================
-        body = abs(close - open_)
-        candle_range = high - low
-
-        bullish = close > open_
-        bearish = close < open_
-
-        strong_body = body > candle_range * 0.45
-
-        # =====================================================
-        # MOMENTUM
-        # =====================================================
-        momentum_up = close > prev_close
-        momentum_down = close < prev_close
-
-        # =====================================================
-        # VOLATILITY
-        # =====================================================
-        volatility_ok = candle_range > close * 0.0006
-
-        # =====================================================
-        # SCORE
-        # =====================================================
-        call_score = 0
-        put_score = 0
-
-        # TREND
-        if trend_up:
-            call_score += 2
-
-        if trend_down:
-            put_score += 2
-
-        # RSI
-        if current_rsi > 55:
-            call_score += 1
-
-        if current_rsi < 45:
-            put_score += 1
-
-        # MOMENTUM
-        if momentum_up:
-            call_score += 1
-
-        if momentum_down:
-            put_score += 1
-
-        # STRONG CANDLE
-        if bullish and strong_body:
-            call_score += 1
-
-        if bearish and strong_body:
-            put_score += 1
-
-        # VOLATILITY
-        if volatility_ok:
-            call_score += 1
-            put_score += 1
-
-        # =====================================================
-        # SIGNAL FINAL
-        # =====================================================
-        if call_score >= 5:
-
-            return (
-                f"🔥 SNIPER CALL\n\n"
-                f"💱 Pair: {symbol}\n"
-                f"📈 Trend: STRONG UP\n"
-                f"📊 RSI: {round(current_rsi, 2)}\n"
-                f"🔥 Score: {call_score}/6\n"
-                f"⏰ Timeframe: 15MIN"
-            )
-
-        if put_score >= 5:
-
-            return (
-                f"⚡ SNIPER PUT\n\n"
-                f"💱 Pair: {symbol}\n"
-                f"📉 Trend: STRONG DOWN\n"
-                f"📊 RSI: {round(current_rsi, 2)}\n"
-                f"🔥 Score: {put_score}/6\n"
-                f"⏰ Timeframe: 15MIN"
-            )
-
-        return None
-
-    except Exception as e:
-
-        return f"ERROR: {str(e)}"
-
-# =====================================================
-# SCAN MARKET
-# =====================================================
-def scan_market():
-
-    signals = []
-
-    for pair in PAIRS:
-
-        result = analyze_pair(pair)
-
-        if result and not result.startswith("ERROR"):
-
-            signals.append(result)
-
-    return signals
-
-# =====================================================
-# AUTO SIGNALS
-# =====================================================
-def auto_signals():
-
-    while True:
-
-        try:
-
-            signals = scan_market()
-
-            for signal in signals:
-
-                if signal not in last_signals:
-
-                    send_message(signal)
-
-                    last_signals[signal] = time.time()
-
-            # CLEAN OLD SIGNALS
-            current_time = time.time()
-
-            expired = []
-
-            for sig, t in last_signals.items():
-
-                if current_time - t > 3600:
-                    expired.append(sig)
-
-            for sig in expired:
-                del last_signals[sig]
-
-        except Exception as e:
-
-            send_message(f"BOT ERROR:\n{str(e)}")
-
-        # CHECK EVERY 5 MINUTES
-        time.sleep(300)
-
-# =====================================================
-# HOME
-# =====================================================
-@app.route("/")
-def home():
-
-    return "SNIPER BOT 15MIN ONLINE"
-
-# =====================================================
-# START PAGE
-# =====================================================
-@app.route("/start")
-def start_page():
-
-    return "SNIPER START OK"
-
-# =====================================================
-# STATUS
-# =====================================================
-@app.route("/status")
-def status():
-
-    return "SNIPER STATUS ACTIVE"
-
-# =====================================================
-# SIGNAL ROUTE
-# =====================================================
-@app.route("/signal")
-def signal():
-
-    signals = scan_market()
-
-    if signals:
-        return "\n\n".join(signals)
-
-    return "NO SIGNAL"
-
-# =====================================================
-# WEBHOOK TELEGRAM
-# =====================================================
-@app.route("/webhook", methods=["POST"])
-def webhook():
-
-    data = request.get_json()
-
-    if "message" in data:
-
-        text = data["message"].get("text", "")
-
-        # START
-        if text == "/start":
-
-            send_message(
-                "🤖 SNIPER BOT 15MIN ACTIVÉ\n\n"
-                "Commandes:\n"
-                "/signal - Voir signaux\n"
-                "/status - Vérifier bot"
-            )
-
-        # STATUS
-        elif text == "/status":
-
-            send_message("✅ SNIPER BOT ONLINE")
-
-        # SIGNALS
-        elif text == "/signal":
-
-            signals = scan_market()
-
-            if signals:
-                send_message("\n\n".join(signals))
-            else:
-                send_message("NO SIGNAL")
-
-    return "ok"
-
-# =====================================================
-# START BOT
-# =====================================================
-if __name__ == "__main__":
-
-    # AUTO SIGNAL THREAD
-    thread = Thread(target=auto_signals)
-    thread.daemon = True
-    thread.start()
-
-    # FLASK SERVER
-    PORT = int(os.environ.get("PORT", 5000))
-
-    app.run(
-        host="0.0.0.0",
-        port=PORT
-    )
+    # ==========================================
+    # EXECUTE
+    # ==========================================
+    elif action == "execute":
+
+        send_menu = {
+            "chat_id": chat_id,
+            "text": "📊 Choisissez un marché :",
+            "reply_markup": market_menu()
+        }
+
+        requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            json=send_menu
+        )
+
+    # ==========================================
+    # FOREX
+    # ==========================================
+    elif action == "market_forex":
+
+        send_menu = {
+            "chat_id": chat_id,
+            "text": "💱 Choisissez une paire Forex :",
+            "reply_markup": forex_menu()
+        }
+
+        requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            json=send_menu
+        )
+
+    # ==========================================
+    # CRYPTO
+    # ==========================================
+    elif action == "market_crypto":
+
+        send_menu = {
+            "chat_id": chat_id,
+            "text": "🪙 Choisissez une Crypto :",
+            "reply_markup": crypto_menu()
+        }
+
+        requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            json=send_menu
+        )
+
+    # ==========================================
+    # AUTO SIGNAL ON
+    # ==========================================
+    elif action == "auto_on":
+
+        send_message("✅ AUTO SIGNAL ACTIVÉ")
+
+    # ==========================================
+    # AUTO SIGNAL OFF
+    # ==========================================
+    elif action == "auto_off":
+
+        send_message("🛑 AUTO SIGNAL DÉSACTIVÉ")
+
+    # ==========================================
+    # HELP
+    # ==========================================
+    elif action == "help":
+
+        send_message(
+            "❓ AIDE\n\n"
+            "🚀 Exécuter → lancer scanner\n"
+            "📡 Auto Signal → signaux automatiques\n"
+            "🌐 Langues → changer langue\n"
+            "💱 Forex & Crypto disponibles"
+        )
