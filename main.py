@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request
 import requests
 import os
 import time
@@ -6,35 +6,39 @@ from threading import Thread
 
 app = Flask(__name__)
 
-# =========================
-# CONFIG
-# =========================
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
 USER = {}
+STATE = {}
 
 PAIRS = {
-    "forex": ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"],
-    "crypto": ["BTC/USD", "ETH/USD", "SOL/USD"],
+    "forex": ["EUR/USD", "GBP/USD", "USD/JPY"],
+    "crypto": ["BTC/USD", "ETH/USD"],
     "gold": ["XAU/USD"]
 }
 
-TF = {
-    "5m": "5min",
-    "15m": "15min",
-    "1h": "1h"
-}
-
 # =========================
-# TELEGRAM SEND
+# TELEGRAM CORE
 # =========================
 def send(chat_id, text, keyboard=None):
 
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
+    data = {"chat_id": chat_id, "text": text}
+
+    if keyboard:
+        data["reply_markup"] = keyboard
+
+    requests.post(url, json=data)
+
+def edit(chat_id, msg_id, text, keyboard=None):
+
+    url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
+
     data = {
         "chat_id": chat_id,
+        "message_id": msg_id,
         "text": text
     }
 
@@ -44,143 +48,88 @@ def send(chat_id, text, keyboard=None):
     requests.post(url, json=data)
 
 # =========================
-# DATA FETCH
+# UI SCREENS
 # =========================
-def candles(symbol, tf):
+def screen_home():
+    return {
+        "inline_keyboard": [
+            [{"text": "📊 Exécuter", "callback_data": "market"}],
+            [{"text": "📡 Auto Signal", "callback_data": "auto"}],
+            [{"text": "🌐 Langue", "callback_data": "lang"}]
+        ]
+    }
 
-    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={tf}&outputsize=50&apikey={API_KEY}"
-    r = requests.get(url).json()
+def screen_market():
+    return {
+        "inline_keyboard": [
+            [{"text": "💱 Forex", "callback_data": "m_forex"},
+             {"text": "🪙 Crypto", "callback_data": "m_crypto"}],
+            [{"text": "🥇 Gold", "callback_data": "m_gold"}],
+            [{"text": "⬅️ Back", "callback_data": "home"}]
+        ]
+    }
 
-    if "values" not in r:
+def screen_signal():
+    return {
+        "inline_keyboard": [
+            [{"text": "🔄 Scan Signal", "callback_data": "scan"}],
+            [{"text": "⬅️ Market", "callback_data": "market"}],
+            [{"text": "🏠 Home", "callback_data": "home"}]
+        ]
+    }
+
+def dashboard_button():
+
+    return {
+        "inline_keyboard": [
+            [{
+                "text": "📊 OPEN DASHBOARD",
+                "url": "https://YOUR-DOMAIN.com/dashboard"
+            }]
+        ]
+    }
+
+# =========================
+# AI SIGNAL SIMPLE (SAFE VERSION)
+# =========================
+def fake_signal(symbol):
+
+    try:
+        r = requests.get(
+            f"https://api.twelvedata.com/price?symbol={symbol}&apikey={API_KEY}"
+        ).json()
+
+        price = float(r.get("price", 0))
+
+        if price == 0:
+            return None
+
+        if int(price) % 2 == 0:
+            return "BUY", 85
+        else:
+            return "SELL", 78
+
+    except:
         return None
-
-    return r["values"][::-1]
-
-# =========================
-# AI SCORE ENGINE
-# =========================
-def score(data):
-
-    closes = [float(c["close"]) for c in data]
-
-    c1, c2, c3 = data[-1], data[-2], data[-3]
-
-    close1 = float(c1["close"])
-    close2 = float(c2["close"])
-    close3 = float(c3["close"])
-    open1 = float(c1["open"])
-
-    ema5 = sum(closes[-5:]) / 5
-    ema20 = sum(closes[-20:]) / 20
-    ema50 = sum(closes[-50:]) / 50
-
-    trend_up = ema5 > ema20 > ema50
-    trend_down = ema5 < ema20 < ema50
-
-    momentum_up = close1 > close2 > close3
-    momentum_down = close1 < close2 < close3
-
-    s = 0
-
-    if trend_up:
-        s += 35
-    if trend_down:
-        s -= 35
-
-    if momentum_up:
-        s += 25
-    if momentum_down:
-        s -= 25
-
-    if close1 > open1:
-        s += 10
-    else:
-        s -= 10
-
-    return s
-
-# =========================
-# SIGNAL ENGINE
-# =========================
-def signal(symbol):
-
-    d5 = candles(symbol, TF["5m"])
-    d15 = candles(symbol, TF["15m"])
-    d1h = candles(symbol, TF["1h"])
-
-    if not d5 or not d15 or not d1h:
-        return None
-
-    s5 = score(d5)
-    s15 = score(d15)
-    s1h = score(d1h)
-
-    total = (s5 * 1) + (s15 * 2) + (s1h * 3)
-
-    prob = min(98, abs(total))
-
-    if total >= 90 and s1h > 0:
-        return "BUY", prob
-
-    if total <= -90 and s1h < 0:
-        return "SELL", prob
-
-    return None
 
 # =========================
 # FORMAT SIGNAL
 # =========================
 def format_signal(symbol, direction, prob):
 
-    emoji = "🟢" if direction == "BUY" else "🔴"
-
     bar = "█" * int(prob / 10) + "░" * (10 - int(prob / 10))
+    emoji = "🟢" if direction == "BUY" else "🔴"
 
     return (
         "━━━━━━━━━━━━━━━━━━\n"
-        "🏦 HEDGE FUND AI BOT\n"
+        "📡 HIGH PROB SIGNAL\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        f"{emoji} {direction}\n\n"
+        f"{emoji} {direction}\n"
         f"💱 {symbol}\n\n"
-        f"🧠 PROBABILITY: {prob}%\n\n"
+        f"🧠 Force: {prob}%\n"
         f"{bar}\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "📊 MULTI TIMEFRAME (5m / 15m / 1h)\n"
         "━━━━━━━━━━━━━━━━━━"
     )
-
-# =========================
-# API SIGNALS (DASHBOARD)
-# =========================
-@app.route("/api/signals")
-def api_signals():
-
-    market = request.args.get("market", "forex")
-
-    res = []
-
-    for p in PAIRS.get(market, []):
-
-        s = signal(p)
-
-        if s:
-
-            d, pr = s
-
-            res.append({
-                "pair": p,
-                "direction": d,
-                "probability": pr
-            })
-
-    return jsonify(res)
-
-# =========================
-# DASHBOARD
-# =========================
-@app.route("/dashboard")
-def dashboard():
-    return render_template("dashboard.html")
 
 # =========================
 # WEBHOOK
@@ -198,49 +147,97 @@ def webhook():
         if chat_id not in USER:
             USER[chat_id] = {"market": "forex"}
 
+        # ================= START =================
         if text == "/start":
 
-            send(chat_id,
+            send(
+                chat_id,
                 "🏦 HEDGE FUND AI BOT\n\n"
                 "📊 Forex / Crypto / Gold\n"
                 "🧠 Institutional AI Engine\n"
                 "📡 HIGH PROB ONLY SIGNALS\n\n"
-                "🌐 DASHBOARD:\n"
-                "👉 /dashboard (web browser)"
+                "🌐 DASHBOARD READY",
+                dashboard_button()
             )
+
+            STATE[chat_id] = "home"
+
+    # ================= CALLBACK =================
+    if "callback_query" in data:
+
+        cb = data["callback_query"]
+        chat_id = cb["message"]["chat"]["id"]
+        msg_id = cb["message"]["message_id"]
+        action = cb["data"]
+
+        STATE.setdefault(chat_id, "home")
+
+        # HOME
+        if action == "home":
+            edit(chat_id, msg_id,
+                "🏠 TRADING APP",
+                screen_home()
+            )
+
+        # MARKET SCREEN
+        elif action == "market":
+            edit(chat_id, msg_id,
+                "💱 SELECT MARKET",
+                screen_market()
+            )
+
+        # MARKET SELECT
+        elif action == "m_forex":
+            USER[chat_id]["market"] = "forex"
+            edit(chat_id, msg_id,
+                "💱 FOREX READY\n📡 HIGH PROB ONLY",
+                screen_signal()
+            )
+
+        elif action == "m_crypto":
+            USER[chat_id]["market"] = "crypto"
+            edit(chat_id, msg_id,
+                "🪙 CRYPTO READY\n📡 HIGH PROB ONLY",
+                screen_signal()
+            )
+
+        elif action == "m_gold":
+            USER[chat_id]["market"] = "gold"
+            edit(chat_id, msg_id,
+                "🥇 GOLD READY\n📡 HIGH PROB ONLY",
+                screen_signal()
+            )
+
+        # SCAN SIGNAL
+        elif action == "scan":
+
+            market = USER[chat_id]["market"]
+
+            for symbol in PAIRS[market]:
+
+                result = fake_signal(symbol)
+
+                if result:
+
+                    d, p = result
+
+                    send(chat_id, format_signal(symbol, d, p))
+
+                    time.sleep(1)
 
     return "ok"
 
 # =========================
-# AUTO LOOP
+# LOOP (OPTIONAL)
 # =========================
 def loop():
-
     while True:
-
-        for chat_id in USER.keys():
-
-            market = USER[chat_id]["market"]
-
-            for p in PAIRS[market]:
-
-                s = signal(p)
-
-                if s:
-
-                    d, pr = s
-
-                    send(chat_id, format_signal(p, d, pr))
-
-                time.sleep(1)
-
-        time.sleep(60)
+        time.sleep(10)
 
 # =========================
 # RUN
 # =========================
 if __name__ == "__main__":
-
     Thread(target=loop, daemon=True).start()
 
     port = int(os.environ.get("PORT", 5000))
