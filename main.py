@@ -25,7 +25,8 @@ FOREX_PAIRS = [
     "EUR/USD",
     "GBP/USD",
     "USD/JPY",
-    "AUD/USD"
+    "AUD/USD",
+    "USD/CAD"
 ]
 
 CRYPTO_PAIRS = [
@@ -39,7 +40,7 @@ GOLD_PAIRS = [
     "XAU/USD"
 ]
 
-PAIRS = FOREX_PAIRS + CRYPTO_PAIRS + GOLD_PAIRS
+ALL_PAIRS = FOREX_PAIRS + CRYPTO_PAIRS + GOLD_PAIRS
 
 # =====================================================
 # MEMORY
@@ -51,7 +52,7 @@ auto_signal_enabled = True
 # =====================================================
 # TELEGRAM MESSAGE
 # =====================================================
-def send_message(text, chat_id=CHAT_ID):
+def send_message(text, chat_id):
 
     try:
 
@@ -68,7 +69,7 @@ def send_message(text, chat_id=CHAT_ID):
         print(e)
 
 # =====================================================
-# TELEGRAM BUTTON MESSAGE
+# TELEGRAM MENU
 # =====================================================
 def send_menu(chat_id, text, keyboard):
 
@@ -272,6 +273,7 @@ def ema(prices, period):
     value = prices[0]
 
     for price in prices[1:]:
+
         value = ((price - value) * multiplier) + value
 
     return value
@@ -304,7 +306,7 @@ def rsi(closes, period=14):
     return 100 - (100 / (1 + rs))
 
 # =====================================================
-# ANALYSE
+# ANALYSE PAIR
 # =====================================================
 def analyze_pair(symbol):
 
@@ -314,7 +316,7 @@ def analyze_pair(symbol):
             f"https://api.twelvedata.com/time_series?"
             f"symbol={symbol}"
             f"&interval={INTERVAL}"
-            f"&outputsize=60"
+            f"&outputsize=50"
             f"&apikey={API_KEY}"
         )
 
@@ -376,6 +378,9 @@ def analyze_pair(symbol):
         if momentum_down:
             put_score += 1
 
+        # =================================================
+        # CALL SIGNAL
+        # =================================================
         if call_score >= 3:
 
             return (
@@ -383,9 +388,12 @@ def analyze_pair(symbol):
                 f"💱 Pair: {symbol}\n"
                 f"📈 RSI: {round(current_rsi,2)}\n"
                 f"🔥 Score: {call_score}/4\n"
-                f"⏰ TF: 15MIN"
+                f"⏰ Timeframe: 15MIN"
             )
 
+        # =================================================
+        # PUT SIGNAL
+        # =================================================
         if put_score >= 3:
 
             return (
@@ -393,7 +401,7 @@ def analyze_pair(symbol):
                 f"💱 Pair: {symbol}\n"
                 f"📉 RSI: {round(current_rsi,2)}\n"
                 f"🔥 Score: {put_score}/4\n"
-                f"⏰ TF: 15MIN"
+                f"⏰ Timeframe: 15MIN"
             )
 
         return None
@@ -407,13 +415,15 @@ def analyze_pair(symbol):
 # =====================================================
 def auto_signals():
 
+    global auto_signal_enabled
+
     while True:
 
         try:
 
             if auto_signal_enabled:
 
-                for pair in PAIRS:
+                for pair in ALL_PAIRS:
 
                     signal = analyze_pair(pair)
 
@@ -421,7 +431,7 @@ def auto_signals():
 
                         if signal not in last_signals:
 
-                            send_message(signal)
+                            send_message(signal, CHAT_ID)
 
                             last_signals[signal] = time.time()
 
@@ -439,7 +449,10 @@ def auto_signals():
 
         except Exception as e:
 
-            send_message(f"BOT ERROR:\n{str(e)}")
+            send_message(
+                f"BOT ERROR:\n{str(e)}",
+                CHAT_ID
+            )
 
         time.sleep(300)
 
@@ -462,7 +475,7 @@ def webhook():
     data = request.get_json()
 
     # =================================================
-    # TELEGRAM MESSAGE
+    # MESSAGE
     # =================================================
     if "message" in data:
 
@@ -472,7 +485,9 @@ def webhook():
 
         text = message.get("text", "")
 
+        # =============================================
         # START
+        # =============================================
         if text == "/start":
 
             send_menu(
@@ -481,7 +496,9 @@ def webhook():
                 main_menu()
             )
 
+        # =============================================
         # STATUS
+        # =============================================
         elif text == "/status":
 
             send_message(
@@ -489,12 +506,14 @@ def webhook():
                 chat_id
             )
 
+        # =============================================
         # SIGNAL
+        # =============================================
         elif text == "/signal":
 
             results = []
 
-            for pair in PAIRS:
+            for pair in ALL_PAIRS:
 
                 result = analyze_pair(pair)
 
@@ -502,11 +521,14 @@ def webhook():
                     results.append(result)
 
             if results:
+
                 send_message(
                     "\n\n".join(results),
                     chat_id
                 )
+
             else:
+
                 send_message(
                     "NO SIGNAL",
                     chat_id
@@ -523,43 +545,91 @@ def webhook():
 
         action = callback["data"]
 
+        # =============================================
         # LANGUAGE
+        # =============================================
         if action == "language":
 
             send_menu(
                 chat_id,
-                "🌐 Language settings\n\n💬 Select your language:",
+                "🌐 Select your language:",
                 language_menu()
             )
 
+        # =============================================
+        # LANGUAGES
+        # =============================================
+        elif action == "fr":
+
+            send_message(
+                "🇫🇷 Français activé",
+                chat_id
+            )
+
+        elif action == "en":
+
+            send_message(
+                "🇬🇧 English activated",
+                chat_id
+            )
+
+        elif action == "pt":
+
+            send_message(
+                "🇵🇹 Português ativado",
+                chat_id
+            )
+
+        elif action == "sw":
+
+            send_message(
+                "🇨🇩 Swahili activated",
+                chat_id
+            )
+
+        elif action == "ln":
+
+            send_message(
+                "🇨🇩 Lingala activé",
+                chat_id
+            )
+
+        # =============================================
         # EXECUTE
+        # =============================================
         elif action == "execute":
 
             send_menu(
                 chat_id,
-                "📊 Choisissez un marché :",
+                "📊 Choisissez le marché :",
                 market_menu()
             )
 
+        # =============================================
         # FOREX
+        # =============================================
         elif action == "forex":
 
             send_menu(
                 chat_id,
-                "💱 Marché Forex",
+                "💱 Forex Market",
                 forex_menu()
             )
 
+        # =============================================
         # CRYPTO
+        # =============================================
         elif action == "crypto":
 
             send_menu(
                 chat_id,
-                "🪙 Marché Crypto",
+                "🪙 Crypto Market",
                 crypto_menu()
             )
 
+        # =============================================
         # GOLD
+        # =============================================
         elif action == "gold":
 
             send_menu(
@@ -568,7 +638,9 @@ def webhook():
                 gold_menu()
             )
 
-        # AUTO ON
+        # =============================================
+        # AUTO SIGNAL ON
+        # =============================================
         elif action == "auto_on":
 
             auto_signal_enabled = True
@@ -578,7 +650,9 @@ def webhook():
                 chat_id
             )
 
-        # AUTO OFF
+        # =============================================
+        # AUTO SIGNAL OFF
+        # =============================================
         elif action == "auto_off":
 
             auto_signal_enabled = False
@@ -588,27 +662,40 @@ def webhook():
                 chat_id
             )
 
+        # =============================================
         # HELP
+        # =============================================
         elif action == "help":
 
             send_message(
                 "❓ AIDE\n\n"
-                "🚀 Exécuter → scanner marché\n"
-                "📡 Auto Signal → signaux automatiques\n"
-                "🌐 Langues disponibles\n"
-                "💱 Forex + Crypto + Gold",
+                "🚀 Exécuter → Scanner marché\n"
+                "📡 Auto Signal → Signaux automatiques\n"
+                "💱 Forex + Crypto + Gold\n"
+                "🌐 Multi-langues",
                 chat_id
             )
 
+        # =============================================
         # SIGNAL PAR PAIRE
+        # =============================================
         elif "/" in action:
 
             result = analyze_pair(action)
 
             if result:
-                send_message(result, chat_id)
+
+                send_message(
+                    result,
+                    chat_id
+                )
+
             else:
-                send_message("NO SIGNAL", chat_id)
+
+                send_message(
+                    "NO SIGNAL",
+                    chat_id
+                )
 
     return "ok"
 
@@ -618,7 +705,9 @@ def webhook():
 if __name__ == "__main__":
 
     thread = Thread(target=auto_signals)
+
     thread.daemon = True
+
     thread.start()
 
     PORT = int(os.environ.get("PORT", 5000))
@@ -626,4 +715,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=PORT
-    )
+        )
