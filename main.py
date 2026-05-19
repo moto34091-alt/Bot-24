@@ -14,7 +14,6 @@ app = Flask(__name__)
 # =====================================================
 TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
-CHAT_ID = os.getenv("CHAT_ID")
 
 INTERVAL = "15min"
 
@@ -43,11 +42,13 @@ GOLD_PAIRS = [
 # =====================================================
 # MEMORY
 # =====================================================
-auto_signal_enabled = True
-
 last_signals = {}
 
 user_languages = {}
+
+selected_market = {}
+
+auto_signal_users = {}
 
 # =====================================================
 # TRANSLATIONS
@@ -163,18 +164,6 @@ def main_menu():
 
             [
                 {
-                    "text": "📡 Auto Signal ON",
-                    "callback_data": "auto_on"
-                },
-
-                {
-                    "text": "🛑 Auto Signal OFF",
-                    "callback_data": "auto_off"
-                }
-            ],
-
-            [
-                {
                     "text": "❓ Aide",
                     "callback_data": "help"
                 }
@@ -247,6 +236,71 @@ def timeframe_menu():
                 {
                     "text": "⏰ 30MIN",
                     "callback_data": "tf30"
+                }
+            ]
+        ]
+    }
+
+# =====================================================
+# MARKET MENU
+# =====================================================
+def market_menu():
+
+    return {
+        "inline_keyboard": [
+
+            [
+                {
+                    "text": "💱 Forex",
+                    "callback_data": "forex"
+                },
+
+                {
+                    "text": "🪙 Crypto",
+                    "callback_data": "crypto"
+                }
+            ],
+
+            [
+                {
+                    "text": "🥇 Gold",
+                    "callback_data": "gold"
+                }
+            ]
+        ]
+    }
+
+# =====================================================
+# SIGNAL MENU
+# =====================================================
+def signal_menu():
+
+    return {
+        "inline_keyboard": [
+
+            [
+                {
+                    "text": "🔍 Signal Maintenant",
+                    "callback_data": "scan_now"
+                }
+            ],
+
+            [
+                {
+                    "text": "📡 Auto Signal ON",
+                    "callback_data": "auto_on_market"
+                },
+
+                {
+                    "text": "🛑 Auto Signal OFF",
+                    "callback_data": "auto_off_market"
+                }
+            ],
+
+            [
+                {
+                    "text": "⬅️ Retour",
+                    "callback_data": "back_main"
                 }
             ]
         ]
@@ -333,44 +387,33 @@ def analyze_pair(symbol):
         volume1 = float(c1.get("volume", 0))
         volume2 = float(c2.get("volume", 0))
 
-        high_volume = volume1 > volume2
-
         ema10 = ema(closes[-10:], 10)
         ema20 = ema(closes[-20:], 20)
         ema50 = ema(closes[-50:], 50)
 
         current_rsi = rsi(closes[-15:], 14)
 
-        strong_uptrend = ema10 > ema20 > ema50
-        strong_downtrend = ema10 < ema20 < ema50
-
         body = abs(close1 - open1)
 
         candle_range = high1 - low1
 
-        upper_wick = high1 - max(close1, open1)
-        lower_wick = min(close1, open1) - low1
-
-        bullish = close1 > open1
-        bearish = close1 < open1
-
         strong_body = body > candle_range * 0.5
-
-        wick_buy = lower_wick > body * 1.5
-        wick_sell = upper_wick > body * 1.5
 
         momentum_up = close1 > close2 > close3
         momentum_down = close1 < close2 < close3
 
-        volatility_ok = candle_range > close1 * 0.0007
+        high_volume = volume1 > volume2
+
+        bullish = close1 > open1
+        bearish = close1 < open1
 
         buy_score = 0
         sell_score = 0
 
-        if strong_uptrend:
+        if ema10 > ema20 > ema50:
             buy_score += 2
 
-        if strong_downtrend:
+        if ema10 < ema20 < ema50:
             sell_score += 2
 
         if current_rsi > 60:
@@ -386,38 +429,27 @@ def analyze_pair(symbol):
             sell_score += 1
 
         if momentum_up:
-            buy_score += 1
+            buy_score += 2
 
         if momentum_down:
-            sell_score += 1
-
-        if wick_buy:
-            buy_score += 1
-
-        if wick_sell:
-            sell_score += 1
+            sell_score += 2
 
         if high_volume:
             buy_score += 1
             sell_score += 1
 
-        if volatility_ok:
-            buy_score += 1
-            sell_score += 1
-
-        buy_percent = int((buy_score / 8) * 100)
-        sell_percent = int((sell_score / 8) * 100)
+        buy_power = int((buy_score / 7) * 100)
+        sell_power = int((sell_score / 7) * 100)
 
         if buy_score >= 6:
 
             return (
                 f"🟢 BUY SIGNAL\n\n"
                 f"💱 Pair: {symbol}\n"
-                f"📈 Trend: BULLISH\n"
-                f"📊 RSI: {round(current_rsi,2)}\n"
+                f"📈 RSI: {round(current_rsi,2)}\n"
                 f"⚡ Momentum: UP\n"
                 f"📦 Volume: HIGH\n"
-                f"🔥 Power: {buy_percent}%\n"
+                f"🔥 Power: {buy_power}%\n"
                 f"⏰ Timeframe: {INTERVAL}"
             )
 
@@ -426,11 +458,10 @@ def analyze_pair(symbol):
             return (
                 f"🔴 SELL SIGNAL\n\n"
                 f"💱 Pair: {symbol}\n"
-                f"📉 Trend: BEARISH\n"
-                f"📊 RSI: {round(current_rsi,2)}\n"
+                f"📉 RSI: {round(current_rsi,2)}\n"
                 f"⚡ Momentum: DOWN\n"
                 f"📦 Volume: HIGH\n"
-                f"🔥 Power: {sell_percent}%\n"
+                f"🔥 Power: {sell_power}%\n"
                 f"⏰ Timeframe: {INTERVAL}"
             )
 
@@ -441,37 +472,69 @@ def analyze_pair(symbol):
         return f"ERROR: {str(e)}"
 
 # =====================================================
-# AUTO SIGNALS
+# AUTO SIGNAL LOOP
 # =====================================================
 def auto_signals():
-
-    global auto_signal_enabled
 
     while True:
 
         try:
 
-            if auto_signal_enabled:
+            for chat_id, market in auto_signal_users.items():
 
-                for pair in FOREX_PAIRS + CRYPTO_PAIRS + GOLD_PAIRS:
+                pairs = []
+
+                if market == "forex":
+                    pairs = FOREX_PAIRS
+
+                elif market == "crypto":
+                    pairs = CRYPTO_PAIRS
+
+                elif market == "gold":
+                    pairs = GOLD_PAIRS
+
+                strong_signals = []
+
+                for pair in pairs:
 
                     signal = analyze_pair(pair)
 
                     if signal:
 
-                        if signal not in last_signals:
+                        power = 0
 
-                            send_message(CHAT_ID, signal)
+                        try:
 
-                            last_signals[signal] = time.time()
+                            power = int(
+                                signal.split("Power: ")[1].split("%")[0]
+                            )
 
-            current_time = time.time()
+                        except:
+                            power = 0
+
+                        strong_signals.append((power, signal))
+
+                strong_signals.sort(reverse=True)
+
+                top_signals = strong_signals[:2]
+
+                for power, signal in top_signals:
+
+                    if signal not in last_signals:
+
+                        send_message(chat_id, signal)
+
+                        last_signals[signal] = time.time()
+
+                        time.sleep(1)
+
+            current = time.time()
 
             expired = []
 
             for sig, t in last_signals.items():
 
-                if current_time - t > 3600:
+                if current - t > 3600:
                     expired.append(sig)
 
             for sig in expired:
@@ -479,7 +542,7 @@ def auto_signals():
 
         except Exception as e:
 
-            send_message(CHAT_ID, f"BOT ERROR:\n{str(e)}")
+            print(e)
 
         time.sleep(300)
 
@@ -498,7 +561,6 @@ def home():
 def webhook():
 
     global INTERVAL
-    global auto_signal_enabled
 
     data = request.get_json()
 
@@ -538,7 +600,7 @@ def webhook():
 
         lang = user_languages.get(chat_id, "en")
 
-        # LANGUAGE
+        # LANGUAGE MENU
         if action == "language":
 
             edit_menu(
@@ -579,26 +641,7 @@ def webhook():
                 chat_id,
                 message_id,
                 get_text(lang, "market"),
-                {
-                    "inline_keyboard": [
-                        [
-                            {
-                                "text": "💱 Forex",
-                                "callback_data": "forex"
-                            },
-                            {
-                                "text": "🪙 Crypto",
-                                "callback_data": "crypto"
-                            }
-                        ],
-                        [
-                            {
-                                "text": "🥇 Gold",
-                                "callback_data": "gold"
-                            }
-                        ]
-                    ]
-                }
+                market_menu()
             )
 
         elif action == "tf30":
@@ -609,134 +652,133 @@ def webhook():
                 chat_id,
                 message_id,
                 get_text(lang, "market"),
-                {
-                    "inline_keyboard": [
-                        [
-                            {
-                                "text": "💱 Forex",
-                                "callback_data": "forex"
-                            },
-                            {
-                                "text": "🪙 Crypto",
-                                "callback_data": "crypto"
-                            }
-                        ],
-                        [
-                            {
-                                "text": "🥇 Gold",
-                                "callback_data": "gold"
-                            }
-                        ]
-                    ]
-                }
+                market_menu()
             )
 
         # FOREX
         elif action == "forex":
 
+            selected_market[chat_id] = "forex"
+
             edit_menu(
                 chat_id,
                 message_id,
-                "💱 SCAN FOREX EN COURS...",
-                main_menu()
+                "💱 FOREX SÉLECTIONNÉ",
+                signal_menu()
             )
-
-            found = False
-
-            for pair in FOREX_PAIRS:
-
-                result = analyze_pair(pair)
-
-                if result:
-
-                    send_message(chat_id, result)
-
-                    found = True
-
-                    time.sleep(1)
-
-            if not found:
-
-                send_message(
-                    chat_id,
-                    "❌ Aucun signal Forex actuellement"
-                )
 
         # CRYPTO
         elif action == "crypto":
 
+            selected_market[chat_id] = "crypto"
+
             edit_menu(
                 chat_id,
                 message_id,
-                "🪙 SCAN CRYPTO EN COURS...",
-                main_menu()
+                "🪙 CRYPTO SÉLECTIONNÉ",
+                signal_menu()
             )
-
-            found = False
-
-            for pair in CRYPTO_PAIRS:
-
-                result = analyze_pair(pair)
-
-                if result:
-
-                    send_message(chat_id, result)
-
-                    found = True
-
-                    time.sleep(1)
-
-            if not found:
-
-                send_message(
-                    chat_id,
-                    "❌ Aucun signal Crypto actuellement"
-                )
 
         # GOLD
         elif action == "gold":
 
+            selected_market[chat_id] = "gold"
+
             edit_menu(
                 chat_id,
                 message_id,
-                "🥇 SCAN GOLD EN COURS...",
-                main_menu()
+                "🥇 GOLD SÉLECTIONNÉ",
+                signal_menu()
             )
 
-            found = False
+        # SCAN NOW
+        elif action == "scan_now":
 
-            for pair in GOLD_PAIRS:
+            market = selected_market.get(chat_id)
 
-                result = analyze_pair(pair)
+            pairs = []
 
-                if result:
+            if market == "forex":
+                pairs = FOREX_PAIRS
 
-                    send_message(chat_id, result)
+            elif market == "crypto":
+                pairs = CRYPTO_PAIRS
 
-                    found = True
+            elif market == "gold":
+                pairs = GOLD_PAIRS
 
-                    time.sleep(1)
+            strong_signals = []
 
-            if not found:
+            for pair in pairs:
+
+                signal = analyze_pair(pair)
+
+                if signal:
+
+                    power = 0
+
+                    try:
+
+                        power = int(
+                            signal.split("Power: ")[1].split("%")[0]
+                        )
+
+                    except:
+                        power = 0
+
+                    strong_signals.append((power, signal))
+
+            strong_signals.sort(reverse=True)
+
+            top_signals = strong_signals[:3]
+
+            if len(top_signals) == 0:
 
                 send_message(
                     chat_id,
-                    "❌ Aucun signal Gold actuellement"
+                    "❌ Aucun signal fort"
                 )
 
+            else:
+
+                for power, signal in top_signals:
+
+                    send_message(chat_id, signal)
+
+                    time.sleep(1)
+
         # AUTO ON
-        elif action == "auto_on":
+        elif action == "auto_on_market":
 
-            auto_signal_enabled = True
+            market = selected_market.get(chat_id)
 
-            send_message(chat_id, "✅ AUTO SIGNAL ACTIVÉ")
+            auto_signal_users[chat_id] = market
+
+            send_message(
+                chat_id,
+                f"✅ AUTO SIGNAL ACTIVÉ : {market.upper()}"
+            )
 
         # AUTO OFF
-        elif action == "auto_off":
+        elif action == "auto_off_market":
 
-            auto_signal_enabled = False
+            if chat_id in auto_signal_users:
+                del auto_signal_users[chat_id]
 
-            send_message(chat_id, "🛑 AUTO SIGNAL DÉSACTIVÉ")
+            send_message(
+                chat_id,
+                "🛑 AUTO SIGNAL ARRÊTÉ"
+            )
+
+        # BACK
+        elif action == "back_main":
+
+            edit_menu(
+                chat_id,
+                message_id,
+                get_text(lang, "welcome"),
+                main_menu()
+            )
 
         # HELP
         elif action == "help":
@@ -745,10 +787,10 @@ def webhook():
                 chat_id,
                 "❓ AIDE\n\n"
                 "🚀 Exécuter → Scanner marché\n"
+                "📡 Auto Signal intelligent\n"
                 "💱 Forex + Crypto + Gold\n"
-                "📡 Auto Signal disponible\n"
                 "⏰ 15MIN et 30MIN\n"
-                "📊 Momentum + RSI + Volume"
+                "📊 RSI + Momentum + Volume"
             )
 
     return "ok"
