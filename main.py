@@ -13,7 +13,6 @@ TOKEN = os.getenv("TOKEN")
 API_KEY = os.getenv("TWELVE_API_KEY")
 
 USER = {}
-HISTORY = []
 
 PAIRS = {
     "forex": ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"],
@@ -28,13 +27,16 @@ TF = {
 }
 
 # =========================
-# TELEGRAM
+# TELEGRAM SEND
 # =========================
 def send(chat_id, text, keyboard=None):
 
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-    data = {"chat_id": chat_id, "text": text}
+    data = {
+        "chat_id": chat_id,
+        "text": text
+    }
 
     if keyboard:
         data["reply_markup"] = keyboard
@@ -42,11 +44,11 @@ def send(chat_id, text, keyboard=None):
     requests.post(url, json=data)
 
 # =========================
-# DATA
+# DATA FETCH
 # =========================
 def candles(symbol, tf):
 
-    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={tf}&outputsize=60&apikey={API_KEY}"
+    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={tf}&outputsize=50&apikey={API_KEY}"
     r = requests.get(url).json()
 
     if "values" not in r:
@@ -55,7 +57,7 @@ def candles(symbol, tf):
     return r["values"][::-1]
 
 # =========================
-# AI ENGINE (INSTITUTIONAL SCORE)
+# AI SCORE ENGINE
 # =========================
 def score(data):
 
@@ -78,64 +80,52 @@ def score(data):
     momentum_up = close1 > close2 > close3
     momentum_down = close1 < close2 < close3
 
-    body = abs(close1 - open1)
-
-    strong_candle = body > (close1 * 0.002)
-
-    score = 0
+    s = 0
 
     if trend_up:
-        score += 35
+        s += 35
     if trend_down:
-        score -= 35
+        s -= 35
 
     if momentum_up:
-        score += 25
+        s += 25
     if momentum_down:
-        score -= 25
-
-    if strong_candle:
-        score += 10
+        s -= 25
 
     if close1 > open1:
-        score += 10
+        s += 10
     else:
-        score -= 10
+        s -= 10
 
-    return score
+    return s
 
 # =========================
-# MULTI TF SIGNAL ENGINE
+# SIGNAL ENGINE
 # =========================
 def signal(symbol):
 
-    s5 = candles(symbol, TF["5m"])
-    s15 = candles(symbol, TF["15m"])
-    s1h = candles(symbol, TF["1h"])
+    d5 = candles(symbol, TF["5m"])
+    d15 = candles(symbol, TF["15m"])
+    d1h = candles(symbol, TF["1h"])
 
-    if not s5 or not s15 or not s1h:
+    if not d5 or not d15 or not d1h:
         return None
 
-    sc5 = score(s5)
-    sc15 = score(s15)
-    sc1h = score(s1h)
+    s5 = score(d5)
+    s15 = score(d15)
+    s1h = score(d1h)
 
-    total = (sc5 * 1) + (sc15 * 2) + (sc1h * 3)
+    total = (s5 * 1) + (s15 * 2) + (s1h * 3)
 
     prob = min(98, abs(total))
 
-    direction = None
+    if total >= 90 and s1h > 0:
+        return "BUY", prob
 
-    if total >= 90 and sc1h > 0:
-        direction = "BUY"
+    if total <= -90 and s1h < 0:
+        return "SELL", prob
 
-    elif total <= -90 and sc1h < 0:
-        direction = "SELL"
-
-    else:
-        return None
-
-    return direction, prob
+    return None
 
 # =========================
 # FORMAT SIGNAL
@@ -148,22 +138,19 @@ def format_signal(symbol, direction, prob):
 
     return (
         "━━━━━━━━━━━━━━━━━━\n"
-        "🏦 HEDGE FUND AI ENGINE\n"
+        "🏦 HEDGE FUND AI BOT\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"{emoji} {direction}\n\n"
         f"💱 {symbol}\n\n"
         f"🧠 PROBABILITY: {prob}%\n\n"
         f"{bar}\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "📊 MULTI TIMEFRAME CONFIRMED\n"
-        "5m + 15m + 1h\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "⚡ HIGH PROB ONLY SYSTEM\n"
+        "📊 MULTI TIMEFRAME (5m / 15m / 1h)\n"
         "━━━━━━━━━━━━━━━━━━"
     )
 
 # =========================
-# DASHBOARD API
+# API SIGNALS (DASHBOARD)
 # =========================
 @app.route("/api/signals")
 def api_signals():
@@ -172,7 +159,7 @@ def api_signals():
 
     res = []
 
-    for p in PAIRS[market]:
+    for p in PAIRS.get(market, []):
 
         s = signal(p)
 
@@ -180,36 +167,23 @@ def api_signals():
 
             d, pr = s
 
-            item = {
+            res.append({
                 "pair": p,
                 "direction": d,
                 "probability": pr
-            }
-
-            HISTORY.append(item)
-
-            res.append(item)
+            })
 
     return jsonify(res)
 
 # =========================
-# HISTORY / WINRATE BASE
-# =========================
-@app.route("/api/history")
-def history():
-
-    return jsonify(HISTORY[-100:])
-
-# =========================
-# DASHBOARD PAGE
+# DASHBOARD
 # =========================
 @app.route("/dashboard")
 def dashboard():
-
     return render_template("dashboard.html")
 
 # =========================
-# TELEGRAM FLOW
+# WEBHOOK
 # =========================
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -230,7 +204,9 @@ def webhook():
                 "🏦 HEDGE FUND AI BOT\n\n"
                 "📊 Forex / Crypto / Gold\n"
                 "🧠 Institutional AI Engine\n"
-                "📡 HIGH PROB ONLY SIGNALS"
+                "📡 HIGH PROB ONLY SIGNALS\n\n"
+                "🌐 DASHBOARD:\n"
+                "👉 /dashboard (web browser)"
             )
 
     return "ok"
@@ -242,9 +218,9 @@ def loop():
 
     while True:
 
-        for chat_id, u in USER.items():
+        for chat_id in USER.keys():
 
-            market = u.get("market", "forex")
+            market = USER[chat_id]["market"]
 
             for p in PAIRS[market]:
 
@@ -256,7 +232,7 @@ def loop():
 
                     send(chat_id, format_signal(p, d, pr))
 
-                time.sleep(2)
+                time.sleep(1)
 
         time.sleep(60)
 
